@@ -420,7 +420,10 @@ services:
       - "5268:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      AgentRuntime__BaseUrl: http://agent-runtime-renegotiation:8100
+      AgentSkills__Skills__0__Id: renegotiation
+      AgentSkills__Skills__0__BaseUrl: http://agent-runtime-renegotiation:8100
+      AgentSkills__Skills__0__DownstreamServiceName: agent-runtime-renegotiation
+      TenantSkillAssignments__Assignments__00000000-0000-0000-0000-000000000001: renegotiation
       ChannelBff__BaseUrl: http://whatsapp-bff:8080
       HandoffService__BaseUrl: ${HANDOFF_SERVICE_BASE_URL:-http://conversation-handoff-service:8080}
       AuditService__BaseUrl: http://conversation-audit-service:8080
