@@ -1,0 +1,82 @@
+name: Resilience invariants
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Invariant to prove
+        type: choice
+        required: true
+        options:
+          - kafka-ack
+          - outbox-memory-recovery
+      core_ref:
+        description: Optional Core mock branch/tag/commit override
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resilience-invariants
+  cancel-in-progress: false
+
+jobs:
+  invariant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      MULTIREPO_READ_TOKEN: ${{ secrets.MULTIREPO_READ_TOKEN }}
+    steps:
+      - name: Require cross-repository read token
+        run: test -n "$MULTIREPO_READ_TOKEN"
+
+      - uses: actions/checkout@v7
+        with:
+          path: conversational-ai-platform-architecture
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Resolve release manifest to exact SHAs
+        env:
+          CORE_REF_OVERRIDE: ${{ inputs.core_ref }}
+        run: |
+          python -m pip install --disable-pip-version-check pyyaml
+          mkdir -p conversational-ai-platform-architecture/artifacts/chaos
+          cp conversational-ai-platform-architecture/release/release-manifest.yaml /tmp/resilience-manifest.yaml
+          if [ -n "$CORE_REF_OVERRIDE" ]; then
+            python - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+          path = Path('/tmp/resilience-manifest.yaml')
+          data = yaml.safe_load(path.read_text(encoding='utf-8'))
+          next(item for item in data['repositories'] if item['name'] == 'core-bancario-mock')['ref'] = os.environ['CORE_REF_OVERRIDE']
+          path.write_text(yaml.safe_dump(data, sort_keys=False), encoding='utf-8')
+          PY
+          fi
+          python conversational-ai-platform-architecture/scripts/checkout-release.py \
+            /tmp/resilience-manifest.yaml "$GITHUB_WORKSPACE" \
+            --reuse conversational-ai-platform-architecture \
+            --lock conversational-ai-platform-architecture/artifacts/chaos/release-lock.yaml
+
+      - name: Execute destructive invariant drill
+        working-directory: conversational-ai-platform-architecture
+        env:
+          ALLOW_DESTRUCTIVE_DRILL: "true"
+          RUN_ID: ${{ github.run_id }}
+        run: scripts/chaos-invariant-drill.sh "${{ inputs.scenario }}"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: resilience-${{ inputs.scenario }}-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: conversational-ai-platform-architecture/artifacts/chaos
