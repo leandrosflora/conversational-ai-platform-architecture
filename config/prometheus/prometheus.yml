@@ -12,6 +12,11 @@ scrape_configs:
     static_configs:
       - targets: [jaeger:14269]
 
+  - job_name: alloy
+    metrics_path: /metrics
+    static_configs:
+      - targets: [alloy:12345]
+
   - job_name: dotnet-services
     metrics_path: /metrics
     static_configs:
@@ -27,6 +32,8 @@ scrape_configs:
     static_configs:
       - targets:
           - agent-runtime-renegotiation:8100
+          - agent-runtime-fatura-cartao:8110
           - knowledge-service:8500
           - conversation-memory-service:8600
           - tool-service-renegotiation:8401
+          - tool-service-cartao-credito:8411

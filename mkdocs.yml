@@ -63,7 +63,8 @@ nav:
   - Visão geral:
       - Contexto de negócio: context/business-context.md
       - Arquitetura C4: architecture/c4-context.md
-      - Diagrama de contexto: architecture/C4/c4-context.svg
+      - Contexto implementado: architecture/C4/c4-context.puml
+      - Contexto alvo: architecture/C4/c4-context-target.puml
       - Containers atuais: architecture/C4/c4-container-current.puml
       - Containers alvo: architecture/C4/c4-container-target.puml
       - Jornadas e sequências: architecture/sequence-diagrams.md
@@ -98,5 +99,6 @@ nav:
       - Segredos por serviço: validation/2026-07-20-per-service-internal-auth-secrets-e2e.md
   - Operação:
       - Runbook local: runbook.md
+      - Atualização de dependências: roadmap/platform-dependency-upgrades.md
 
 copyright: Copyright &copy; 2026 Leandro Flora — Apache-2.0

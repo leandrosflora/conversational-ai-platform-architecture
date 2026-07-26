@@ -7,6 +7,29 @@ services:
     volumes:
       - ./database/conversational-ai-mongodb-p0-consistency.js:/docker-entrypoint-initdb.d/002-p0-consistency.js:ro
 
+  # Promtail is retained only as an explicit rollback path. The default stack uses Alloy.
+  promtail:
+    profiles: ["legacy-promtail"]
+
+  alloy:
+    image: grafana/alloy:v1.16.1
+    container_name: conversational-ai-alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    networks:
+      - conversational-ai
+
   kafka-init:
     command: >
       "
@@ -30,6 +53,7 @@ services:
       Kafka__RawWebhookDeadLetterTopic: channel.webhook.received.dlq
       Kafka__MaxDeliveryAttempts: "5"
       Kafka__RetryBackoffSeconds: "2"
+      WhatsApp__GraphApiBaseUrl: https://graph.facebook.com/${WHATSAPP_GRAPH_API_VERSION:-v20.0}
     depends_on:
       redis:
         condition: service_healthy
@@ -65,6 +89,7 @@ services:
       TOOL_SERVICE_AUDIENCE: tool-service-renegotiation
       KNOWLEDGE_SERVICE_AUDIENCE: knowledge-service
       CONVERSATION_MEMORY_SERVICE_AUDIENCE: conversation-memory-service
+      OPENAI_MODEL_ID: ${OPENAI_MODEL_ID:-gpt-4o-mini-2024-07-18}
 
   tool-service-renegotiation:
     environment:
@@ -107,6 +132,7 @@ services:
       INTERNAL_AUTH_INBOUND_SECRETS__conversation-orchestrator: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO in .env}
       INTERNAL_AUTH_TOKEN_TTL_SECONDS: "300"
       TOOL_SERVICE_AUDIENCE: tool-service-cartao-credito
+      OPENAI_MODEL_ID: ${OPENAI_MODEL_ID:-gpt-4o-mini-2024-07-18}
 
   knowledge-service:
     environment:
@@ -138,3 +164,6 @@ services:
       InternalAuth__Issuer: conversational-ai-platform
       InternalAuth__ServiceName: conversation-handoff-service
       InternalAuth__InboundSecrets__conversation-orchestrator: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE in .env}
+
+volumes:
+  alloy-data:
