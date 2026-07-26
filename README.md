@@ -12,7 +12,7 @@ Arquitetura de referência para plataformas de IA conversacional utilizando agen
 - [Contexto de negócio](docs/context/business-context.md) — jornadas, personas e escopo.
 - [C4 nível 1 (contexto)](docs/architecture/c4-context.md) e [diagramas C4](docs/architecture/C4/) (`.puml`/`.svg`/`.png`).
 - [Diagramas de sequência da jornada](docs/architecture/sequence-diagrams.md) — passo a passo técnico, do webhook do WhatsApp até a consulta de débitos/elegibilidade.
-- [Páginas de referência por serviço](docs/services/) — responsabilidade, APIs, eventos e regras de negócio de cada um dos 10 serviços implementados.
+- [Páginas de referência por serviço](docs/services/) — responsabilidade, APIs, eventos e regras de negócio de cada um dos 12 serviços implementados.
 - [Contratos](docs/contracts/) — mapa de serviços, matriz de eventos Kafka, datastores.
 - [ADRs](docs/adr/) — decisões de arquitetura já implementadas no código.
 - [Arquitetura de segurança](docs/security/security-architecture.md).
@@ -72,6 +72,8 @@ O Prometheus coleta métricas dele mesmo, do Jaeger e de uma aplicação exposta
 | Agent Runtime | [agent-runtime-renegotiation](https://github.com/leandrosflora/agent-runtime-renegotiation) |
 | Tool Service (MCP) | [tool-service-renegotiation](https://github.com/leandrosflora/tool-service-renegotiation) |
 | Renegotiation Service | [renegotiation-service](https://github.com/leandrosflora/renegotiation-service) |
+| Agent Runtime (fatura de cartão) | [agent-runtime-fatura-cartao](https://github.com/leandrosflora/agent-runtime-fatura-cartao) |
+| Tool Service (fatura de cartão, MCP) | [tool-service-cartao-credito](https://github.com/leandrosflora/tool-service-cartao-credito) |
 | Core Bancário (mock) | [core-bancario-mock](https://github.com/leandrosflora/core-bancario-mock) |
 | Knowledge Service | [knowledge-service](https://github.com/leandrosflora/knowledge-service) |
 | Conversation Memory Service | [conversation-memory-service](https://github.com/leandrosflora/conversation-memory-service) |
@@ -80,7 +82,7 @@ O Prometheus coleta métricas dele mesmo, do Jaeger e de uma aplicação exposta
 
 Detalhe de responsabilidades, APIs e regras de negócio de cada um em [`docs/services/`](docs/services/).
 
-Os 10 repos (os desta tabela exceto Core Bancário + este) têm CI (`.github/workflows/ci.yml`) rodando build/teste (ou, neste repo, `docker compose config`) a cada push/PR para o branch padrão. Core Bancário agora tem repositório próprio, mas ainda não tem workflow de CI configurado.
+Os 12 repos (os desta tabela exceto Core Bancário + este) têm CI (`.github/workflows/ci.yml`) rodando build/teste (ou, neste repo, `docker compose config`) a cada push/PR para o branch padrão. Core Bancário agora tem repositório próprio, mas ainda não tem workflow de CI configurado.
 
 ## Kafka em prática
 
