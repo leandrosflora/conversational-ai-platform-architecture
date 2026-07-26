@@ -82,6 +82,7 @@ nav:
       - Conversation Memory: services/conversation-memory-service.md
       - Conversation Audit: services/conversation-audit-service.md
       - Conversation Handoff: services/conversation-handoff-service.md
+      - Alertmanager: services/alertmanager.md
   - Contratos:
       - Eventos Kafka: contracts/kafka-events.md
       - Dados e ownership: contracts/data-stores.md
