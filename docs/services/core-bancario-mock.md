@@ -52,7 +52,9 @@ Para os 10 CPFs reservados, elegibilidade/simulação-expira/documento-pendente 
 CPF em vez desses gatilhos textuais (embora `simulationId`/`agreementId` ainda carreguem os mesmos
 marcadores `-expired`/`-pendente` internamente, propagados a partir do CPF do contrato de origem).
 
-**Inconsistência conhecida:** o cabeçalho do código afirma que o mock "sempre retorna 200 OK, nunca 4xx" — mas o handler de `GET /clients/{cpf}` retorna `404 Not Found` para CPF não cadastrado, contradizendo esse comentário. Os demais 4 cenários acima seguem a convenção de sempre `200`. Além disso, os endpoints de contratos e dívidas (`/clients/{clientId}/contracts`, `/contracts/{contractId}/debts`) não implementam nenhum gatilho de "não encontrado" próprio, embora o `renegotiation-service` os trate como se pudessem retornar 404.
+**Convenção de status HTTP:** "não encontrado" (o identificador não resolve a nada real, ex. `GET /clients/{cpf}` com CPF não cadastrado) sempre retorna `404 Not Found`; "negócio negativo" (o identificador resolve a algo real que foi avaliado e reprovado — os 4 cenários de inelegibilidade/simulação/confirmação/documento acima) sempre retorna `200 OK` com um campo de resultado indicando o motivo.
+
+**Gap conhecido:** os endpoints de contratos e dívidas (`/clients/{clientId}/contracts`, `/contracts/{contractId}/debts`) não implementam nenhum gatilho de "não encontrado" próprio, embora o `renegotiation-service` os trate como se pudessem retornar 404.
 
 ## Referências de arquitetura
 
