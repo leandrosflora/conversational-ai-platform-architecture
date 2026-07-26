@@ -2,6 +2,12 @@ name: Multi-repository E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      core_ref:
+        description: Core mock branch/tag/commit to validate
+        required: false
+        default: master
+        type: string
   schedule:
     - cron: "0 6 * * 1"
 
@@ -100,6 +106,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: leandrosflora/core-bancario-mock
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.core_ref || 'master' }}
           path: core-bancario-mock
           token: ${{ secrets.MULTIREPO_READ_TOKEN }}
 
