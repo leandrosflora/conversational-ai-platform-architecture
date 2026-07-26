@@ -1,6 +1,6 @@
 # renegotiation-service
 
-Repo: [`leandrosflora/renegotiation-service`](https://github.com/leandrosflora/renegotiation-service) · Stack: .NET 8, Minimal API · Porta local: `9400`
+Repo: [`leandrosflora/renegotiation-service`](https://github.com/leandrosflora/renegotiation-service) · Stack: .NET 8, Minimal API · Porta local (`dotnet run`): `9400` · Porta host via `docker compose up -d`: `5266`
 
 ## Responsabilidade principal
 
