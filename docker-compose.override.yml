@@ -40,6 +40,7 @@ services:
       InternalAuth__ServiceName: conversation-orchestrator
       InternalAuth__OutboundSecrets__whatsapp-bff: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__WHATSAPP_BFF:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__WHATSAPP_BFF in .env}
       InternalAuth__OutboundSecrets__agent-runtime-renegotiation: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_RENEGOTIATION:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_RENEGOTIATION in .env}
+      InternalAuth__OutboundSecrets__agent-runtime-fatura-cartao: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO in .env}
       InternalAuth__OutboundSecrets__conversation-audit-service: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_AUDIT_SERVICE:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_AUDIT_SERVICE in .env}
       InternalAuth__OutboundSecrets__conversation-handoff-service: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE in .env}
       InternalAuth__OutboundSecrets__conversation-memory-service: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_MEMORY_SERVICE:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_MEMORY_SERVICE in .env}
@@ -86,6 +87,26 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # No outbound secret: it calls core-bancario-mock directly, which has no auth of its own (see
+  # tool-service-cartao-credito/app/card_client.py).
+  tool-service-cartao-credito:
+    environment:
+      INTERNAL_AUTH_ENABLED: "true"
+      INTERNAL_AUTH_ISSUER: conversational-ai-platform
+      INTERNAL_AUTH_SERVICE_NAME: tool-service-cartao-credito
+      INTERNAL_AUTH_INBOUND_SECRETS__agent-runtime-fatura-cartao: ${INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO:?Set INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO in .env}
+      INTERNAL_AUTH_TOKEN_TTL_SECONDS: "300"
+
+  agent-runtime-fatura-cartao:
+    environment:
+      INTERNAL_AUTH_ENABLED: "true"
+      INTERNAL_AUTH_ISSUER: conversational-ai-platform
+      INTERNAL_AUTH_SERVICE_NAME: agent-runtime-fatura-cartao
+      INTERNAL_AUTH_OUTBOUND_SECRETS__tool-service-cartao-credito: ${INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO:?Set INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO in .env}
+      INTERNAL_AUTH_INBOUND_SECRETS__conversation-orchestrator: ${INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO:?Set INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO in .env}
+      INTERNAL_AUTH_TOKEN_TTL_SECONDS: "300"
+      TOOL_SERVICE_AUDIENCE: tool-service-cartao-credito
 
   knowledge-service:
     environment:

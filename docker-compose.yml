@@ -254,6 +254,7 @@ services:
       - "9402:9402"
       - "9403:9403"
       - "9404:9404"
+      - "9405:9405"
     networks:
       - conversational-ai
 
@@ -343,6 +344,34 @@ services:
     networks:
       - conversational-ai
 
+  # Thin MCP tool-service for the credit card invoice/limit skill - no intermediate business
+  # service (unlike tool-service-renegotiation -> renegotiation-service): both tools are
+  # stateless read-only lookups, so this calls core-bancario-mock directly. See
+  # tool-service-cartao-credito/README.md.
+  tool-service-cartao-credito:
+    build:
+      context: ../tool-service-cartao-credito
+    container_name: conversational-ai-tool-service-cartao-credito
+    ports:
+      - "8410:8410"
+      - "8411:8411"
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8410"
+      DOCS_PORT: "8411"
+      CORE_BANCARIO_BASE_URL: http://core-bancario-mock:9405
+      CORE_BANCARIO_RETRY_ATTEMPTS: "2"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOOL_EVENTS_TOPIC: tool.executed
+      OTEL_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      kafka:
+        condition: service_healthy
+      core-bancario-mock:
+        condition: service_started
+    networks:
+      - conversational-ai
+
   knowledge-service:
     build:
       context: ../knowledge-service
@@ -423,7 +452,15 @@ services:
       AgentSkills__Skills__0__Id: renegotiation
       AgentSkills__Skills__0__BaseUrl: http://agent-runtime-renegotiation:8100
       AgentSkills__Skills__0__DownstreamServiceName: agent-runtime-renegotiation
-      TenantSkillAssignments__Assignments__00000000-0000-0000-0000-000000000001: renegotiation
+      AgentSkills__Skills__0__SelectionButtonId: skill_renegotiation
+      AgentSkills__Skills__0__SelectionButtonTitle: "Renegociar dividas"
+      AgentSkills__Skills__1__Id: cartao-credito
+      AgentSkills__Skills__1__BaseUrl: http://agent-runtime-fatura-cartao:8110
+      AgentSkills__Skills__1__DownstreamServiceName: agent-runtime-fatura-cartao
+      AgentSkills__Skills__1__SelectionButtonId: skill_cartao_credito
+      AgentSkills__Skills__1__SelectionButtonTitle: "Fatura do cartao"
+      TenantSkillAssignments__Assignments__00000000-0000-0000-0000-000000000001__0: renegotiation
+      TenantSkillAssignments__Assignments__00000000-0000-0000-0000-000000000001__1: cartao-credito
       ChannelBff__BaseUrl: http://whatsapp-bff:8080
       HandoffService__BaseUrl: ${HANDOFF_SERVICE_BASE_URL:-http://conversation-handoff-service:8080}
       AuditService__BaseUrl: http://conversation-audit-service:8080
@@ -438,6 +475,8 @@ services:
         condition: service_healthy
       agent-runtime-renegotiation:
         condition: service_started
+      agent-runtime-fatura-cartao:
+        condition: service_started
       conversation-audit-service:
         condition: service_started
       conversation-handoff-service:
@@ -446,6 +485,29 @@ services:
       # unreachable (see IngestMessageUseCase) - this is start-order tidiness, not a
       # correctness requirement, matching the same pattern used for knowledge-service.
       conversation-memory-service:
+        condition: service_started
+    networks:
+      - conversational-ai
+
+  agent-runtime-fatura-cartao:
+    build:
+      context: ../agent-runtime-fatura-cartao
+    container_name: conversational-ai-agent-runtime-fatura-cartao
+    ports:
+      - "8110:8110"
+    environment:
+      MOCK_AGENT_ENABLED: ${MOCK_AGENT_ENABLED:-true}
+      OPENAI_MODEL_ID: ${OPENAI_MODEL_ID:-gpt-4o-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TOOL_SERVICE_MCP_URL: http://tool-service-cartao-credito:8410/mcp
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_AGENT_EVENTS_TOPIC: agent.events
+      CONFIDENCE_THRESHOLD: "0.6"
+      OTEL_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      kafka:
+        condition: service_healthy
+      tool-service-cartao-credito:
         condition: service_started
     networks:
       - conversational-ai
