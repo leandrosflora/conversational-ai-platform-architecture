@@ -87,6 +87,7 @@ nav:
       - Eventos Kafka: contracts/kafka-events.md
       - Dados e ownership: contracts/data-stores.md
       - Segurança: security/security-architecture.md
+      - Supply chain: security/supply-chain.md
   - Decisões:
       - Kafka como fila durável: adr/0001-kafka-durable-webhook-queue.md
       - Arquitetura hexagonal: adr/0002-hexagonal-ports-and-adapters.md
