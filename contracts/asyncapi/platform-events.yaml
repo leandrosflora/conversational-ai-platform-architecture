@@ -1,0 +1,70 @@
+asyncapi: 3.0.0
+info:
+  title: Conversational AI Platform Events
+  version: 1.0.0
+defaultContentType: application/json
+servers:
+  localKafka:
+    host: kafka:9092
+    protocol: kafka
+components:
+  messages:
+    PlatformEvent:
+      name: PlatformEvent
+      payload:
+        type: object
+        required: [event_id, occurred_at, trace_id]
+        properties:
+          event_id: { type: string, minLength: 1 }
+          occurred_at: { type: string, format: date-time }
+          trace_id: { type: string, minLength: 1 }
+          tenant_id: { type: string, format: uuid }
+          conversation_id: { type: string }
+      headers:
+        type: object
+        properties:
+          traceparent: { type: string }
+channels:
+  channelWebhookReceived:
+    address: channel.webhook.received
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  channelWebhookReceivedRetry:
+    address: channel.webhook.received.retry
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  channelWebhookReceivedDlq:
+    address: channel.webhook.received.dlq
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  channelMessageReceived:
+    address: channel.message.received
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  channelMessageStatus:
+    address: channel.message.status
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  intentDetected:
+    address: intent.detected
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  conversationStateChanged:
+    address: conversation.state_changed
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  agentEvents:
+    address: agent.events
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+  toolExecuted:
+    address: tool.executed
+    messages: { platformEvent: { $ref: '#/components/messages/PlatformEvent' } }
+operations:
+  receiveRawWebhook:
+    action: receive
+    channel: { $ref: '#/channels/channelWebhookReceived' }
+  receiveRawWebhookRetry:
+    action: receive
+    channel: { $ref: '#/channels/channelWebhookReceivedRetry' }
+  publishRawWebhookDlq:
+    action: send
+    channel: { $ref: '#/channels/channelWebhookReceivedDlq' }
+  publishAgentEvents:
+    action: send
+    channel: { $ref: '#/channels/agentEvents' }
+  publishToolExecuted:
+    action: send
+    channel: { $ref: '#/channels/toolExecuted' }
