@@ -23,7 +23,7 @@
 | agent-runtime-renegotiation | Kafka (produtor) | `agent.events` — já chama `knowledge-service` via `GET /search` (`app/tools/knowledge.py`) |
 | tool-service-renegotiation | Kafka (produtor) | `tool.executed` |
 | agent-runtime-fatura-cartao | Kafka (produtor) | `agent.events` — sem chamada a `knowledge-service` nem `conversation-memory-service` |
-| tool-service-cartao-credito | Kafka (produtor) | `tool.executed` — chama `core-bancario-mock` (Card API) diretamente, sem autenticação |
+| tool-service-cartao-credito | Kafka (produtor) | `tool.executed` — chama `core-bancario-mock` (Card API) diretamente, com JWT assinado (não validado pelo mock) |
 | conversation-memory-service | Redis; MongoDB | Redis: sessão ativa por conversa, com TTL, chave `tenant:{tenantId}:session:{conversationId}` (`GET`/`PUT`/`DELETE /sessions/{conversation_id}`). MongoDB: histórico de mensagens em `conversation_messages` (`/conversations/{id}/messages`) e fatos de memória de longo prazo em `agent_memory` (`/users/{id}/memory`) |
 | knowledge-service | OpenSearch | Índice por tenant `faq_chunks-{tenantId}` (k-NN vector search sobre embeddings OpenAI). Ingestão de PDFs de FAQ em `data/faq_pdfs/{tenantId}/`, no startup e via `POST /admin/reindex` |
 | conversation-audit-service | PostgreSQL | `POST /journey-events` grava uma linha em `ops.audit_events` por evento (`tenant_id` resolvido do request, `idempotency_key` do header, `actor_type='system'`, `action='conversation.journey_processed'`); deduplicado por `(tenant_id, idempotency_key)` |

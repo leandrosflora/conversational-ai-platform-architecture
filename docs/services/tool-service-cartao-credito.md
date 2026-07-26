@@ -39,7 +39,7 @@ Nenhum.
 
 | Destino | Comportamento se indisponível |
 |---|---|
-| `core-bancario-mock` (`:9405`) | Chamada HTTP direta e **sem autenticação** (o `core-bancario-mock` não tem auth própria, diferente do `renegotiation-service`). Timeout de 5s por chamada; retry via `tenacity` (2 tentativas extras = 3 no total, 0.2s entre elas); um `404` (CPF não encontrado) é tratado como resultado de negócio normal, não entra no retry — retorna o shape "não encontrado"; qualquer outra falha após esgotar as tentativas levanta `CoreBancarioUnavailableError`, propagada ao agente cliente |
+| `core-bancario-mock` (`:9405`) | Chamada HTTP direta, com um JWT assinado (`Authorization: Bearer` + `X-Tenant-Id`, audiência `core-bancario-mock`) anexado por paridade com o resto da plataforma — mas **não validado do outro lado**, já que o `core-bancario-mock` não tem middleware de auth própria. Timeout de 5s por chamada; retry via `tenacity` (2 tentativas extras = 3 no total, 0.2s entre elas); um `404` (CPF não encontrado) é tratado como resultado de negócio normal, não entra no retry — retorna o shape "não encontrado"; qualquer outra falha após esgotar as tentativas levanta `CoreBancarioUnavailableError`, propagada ao agente cliente |
 
 ## Persistência & infraestrutura
 
@@ -50,7 +50,7 @@ Nenhuma. Sem estado — cada chamada de tool é uma tradução direta para uma r
 1. **Autorização por serviço chamador**: só `agent-runtime-fatura-cartao` pode executar as tools governadas (`consultar_limite_cartao`, `consultar_fatura_cartao`) — verificado pelo `caller_service` do contexto de execução assinado; qualquer outro chamador recebe erro de política negada.
 2. **Contexto de execução assinado obrigatório**: o JWT precisa ter `token_use == "tool_execution"` mais `sub`/`conversation_id`/`message_id` — sem isso, `403`.
 3. Nenhum argumento de tool (CPF) é publicado no Kafka, em nenhuma circunstância.
-4. Chamada ao `core-bancario-mock` não carrega segredo outbound — é o único downstream deste workspace chamado sem autenticação interna, por desenho.
+4. Chamada ao `core-bancario-mock` carrega um segredo outbound próprio (`INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK`) e assina um JWT com ele — mas o mock não valida esse token, então isso não é hoje um controle de segurança real, só paridade estrutural com o resto da plataforma (ver [`docs/security/security-architecture.md`](../security/security-architecture.md)).
 
 ## Referências de arquitetura
 

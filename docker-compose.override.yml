@@ -113,15 +113,17 @@ services:
       postgres:
         condition: service_healthy
 
-  # No outbound secret: it calls core-bancario-mock directly, which has no auth of its own (see
-  # tool-service-cartao-credito/app/card_client.py).
+  # The Card tool signs a service token for parity with the remaining synchronous hops.
+  # The mock still lacks authentication middleware, so the token is not validated there.
   tool-service-cartao-credito:
     environment:
       INTERNAL_AUTH_ENABLED: "true"
       INTERNAL_AUTH_ISSUER: conversational-ai-platform
       INTERNAL_AUTH_SERVICE_NAME: tool-service-cartao-credito
       INTERNAL_AUTH_INBOUND_SECRETS__agent-runtime-fatura-cartao: ${INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO:?Set INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO in .env}
+      INTERNAL_AUTH_OUTBOUND_SECRETS__core-bancario-mock: ${INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK:?Set INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK in .env}
       INTERNAL_AUTH_TOKEN_TTL_SECONDS: "300"
+      CORE_BANCARIO_MOCK_AUDIENCE: core-bancario-mock
 
   agent-runtime-fatura-cartao:
     environment:

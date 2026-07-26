@@ -25,31 +25,25 @@ jobs:
         run: pip install -r requirements-docs.txt
 
       - name: Write placeholder environment
-        run: |
-          cat > .env <<'ENVEOF'
-          INTERNAL_AUTH_SECRET_WHATSAPP_BFF__CONVERSATION_ORCHESTRATOR=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__WHATSAPP_BFF=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_RENEGOTIATION=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_AUDIT_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_MEMORY_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__TOOL_SERVICE_RENEGOTIATION=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__KNOWLEDGE_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__CONVERSATION_MEMORY_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
-          OPENAI_API_KEY=sk-placeholder-not-a-real-key
-          OPENAI_MODEL_ID=gpt-4o-mini-2024-07-18
-          MOCK_AGENT_ENABLED=true
-          WHATSAPP_APP_SECRET=placeholder
-          WHATSAPP_VERIFY_TOKEN=placeholder
-          WHATSAPP_GRAPH_API_VERSION=v20.0
-          ENVEOF
+        run: scripts/write-ci-env.sh
 
       - name: Validate Docker Compose configuration
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml config --quiet
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.override.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.override.yml config --format json > /tmp/compose.json
+
+      - name: Validate canonical contracts against Compose
+        run: |
+          set -o pipefail
+          python scripts/validate-contract-drift.py /tmp/compose.json 2>&1 | tee contract-validation.log
+
+      - name: Upload contract validation diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-validation-diagnostics
+          if-no-files-found: error
+          path: contract-validation.log
 
       - name: Validate Grafana Alloy configuration
         run: |
@@ -58,11 +52,110 @@ jobs:
             grafana/alloy:v1.16.1 \
             validate /etc/alloy/config.alloy
 
-      - name: Validate smoke script syntax
-        run: bash -n scripts/ci-smoke.sh
+      - name: Validate automation scripts
+        run: |
+          bash -n scripts/ci-smoke.sh
+          bash -n scripts/render-c4.sh
+          bash -n scripts/verify-c4-generated.sh
+          bash -n scripts/write-ci-env.sh
+          python -m py_compile scripts/validate-contract-drift.py
+
+      - name: Verify generated C4 diagrams
+        run: scripts/verify-c4-generated.sh
 
       - name: Build MkDocs strictly
-        run: mkdocs build --strict
+        run: mkdocs build --clean --strict
+
+  render-diagrams:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+
+      - name: Render C4 diagrams
+        run: scripts/render-c4.sh
+
+      - name: Synchronize generated diagrams on same-repository PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git add docs/architecture/C4/c4-context.svg \
+                  docs/architecture/C4/c4-context.png \
+                  docs/architecture/C4/c4-container.svg \
+                  docs/architecture/C4/c4-container.png
+          if git diff --cached --quiet; then
+            echo "Generated diagrams already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: regenerate C4 artifacts [skip ci]"
+          git push origin "HEAD:${{ github.head_ref }}"
+
+      - name: Upload generated diagrams
+        uses: actions/upload-artifact@v4
+        with:
+          name: c4-diagrams
+          if-no-files-found: error
+          path: |
+            docs/architecture/C4/c4-context.svg
+            docs/architecture/C4/c4-context.png
+            docs/architecture/C4/c4-container.svg
+            docs/architecture/C4/c4-container.png
+
+  link-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check documentation links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress
+            --max-retries 2
+            --timeout 20
+            --exclude-path site
+            './README.md'
+            './docs/**/*.md'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan repository for critical vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload Trivy SARIF
+        if: always() && github.actor != 'dependabot[bot]'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Generate SPDX SBOM
+        if: always()
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
 
   infrastructure-smoke:
     needs: static-validation
@@ -72,44 +165,34 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Write placeholder environment
-        run: |
-          cat > .env <<'ENVEOF'
-          INTERNAL_AUTH_SECRET_WHATSAPP_BFF__CONVERSATION_ORCHESTRATOR=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__WHATSAPP_BFF=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_RENEGOTIATION=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_AUDIT_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_MEMORY_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__TOOL_SERVICE_RENEGOTIATION=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__KNOWLEDGE_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__CONVERSATION_MEMORY_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO=placeholder-secret-for-ci-only-not-a-real-secret
-          INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
-          DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
-          OPENAI_API_KEY=sk-placeholder-not-a-real-key
-          OPENAI_MODEL_ID=gpt-4o-mini-2024-07-18
-          MOCK_AGENT_ENABLED=true
-          WHATSAPP_APP_SECRET=placeholder
-          WHATSAPP_VERIFY_TOKEN=placeholder
-          WHATSAPP_GRAPH_API_VERSION=v20.0
-          ENVEOF
+        run: scripts/write-ci-env.sh
 
       - name: Run infrastructure smoke test
         run: scripts/ci-smoke.sh
 
+  # Compatibility gate retained until branch protection is changed to require the
+  # five named jobs above directly. Remove this job after that settings change.
   compose-config:
     name: compose-config
     if: ${{ always() }}
     needs:
       - static-validation
       - infrastructure-smoke
+      - link-validation
+      - security-scan
+      - render-diagrams
     runs-on: ubuntu-latest
     steps:
-      - name: Enforce replacement checks
+      - name: Enforce required checks
         env:
           STATIC_VALIDATION_RESULT: ${{ needs.static-validation.result }}
           INFRASTRUCTURE_SMOKE_RESULT: ${{ needs.infrastructure-smoke.result }}
+          LINK_VALIDATION_RESULT: ${{ needs.link-validation.result }}
+          SECURITY_SCAN_RESULT: ${{ needs.security-scan.result }}
+          RENDER_DIAGRAMS_RESULT: ${{ needs.render-diagrams.result }}
         run: |
           test "$STATIC_VALIDATION_RESULT" = "success"
           test "$INFRASTRUCTURE_SMOKE_RESULT" = "success"
+          test "$LINK_VALIDATION_RESULT" = "success"
+          test "$SECURITY_SCAN_RESULT" = "success"
+          test "$RENDER_DIAGRAMS_RESULT" = "success"

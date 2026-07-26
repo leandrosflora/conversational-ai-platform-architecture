@@ -233,7 +233,7 @@ else CPF informado
   Agent -> Tools: MCP + JWT tool_execution\nconsultar_limite_cartao / consultar_fatura_cartao
   activate Tools
   Tools -> Tools: authorize_tool\n(caller_service == agent-runtime-fatura-cartao)
-  Tools -> Core: GET /clients/{cpf}/card/limit|invoice\nsem autenticação própria
+  Tools -> Core: GET /clients/{cpf}/card/limit|invoice\nJWT tenant_id enviado, não validado pelo mock
   Core --> Tools: found=false (CPF não resolve)\nou HasCard=false\nou dados do cartão
   Tools --> Agent: resultado (ou shape "not found" fixo)
   deactivate Tools
