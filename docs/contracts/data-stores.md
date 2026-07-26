@@ -1,6 +1,6 @@
 # Datastores
 
-**Fonte de verdade:** varredura do código-fonte em 2026-07-17 (ver [`services-map.md`](services-map.md)).
+**Fonte de verdade:** varredura do código-fonte em 2026-07-17, atualizada em 2026-07-26 com os dois serviços da skill de fatura/limite de cartão de crédito (ver [`services-map.md`](services-map.md)).
 
 ## O que está provisionado vs. o que é realmente usado
 
@@ -8,7 +8,7 @@
 
 | Datastore | Provisionado em `docker-compose.yml`? | Usado por algum serviço hoje? |
 |---|---|---|
-| Kafka | Sim | **Sim** — whatsapp-bff, conversation-orchestrator, agent-runtime-renegotiation, tool-service-renegotiation |
+| Kafka | Sim | **Sim** — whatsapp-bff, conversation-orchestrator, agent-runtime-renegotiation, tool-service-renegotiation, agent-runtime-fatura-cartao, tool-service-cartao-credito |
 | PostgreSQL | Sim | **Sim** — conversation-audit-service (`ops.audit_events`), conversation-handoff-service (`conversation.handoffs`) |
 | MongoDB | Sim | **Sim** — conversation-memory-service (`conversation_messages`, `agent_memory`) |
 | Redis | Sim | **Sim** — conversation-memory-service (sessão ativa) |
@@ -22,6 +22,8 @@
 | conversation-orchestrator | Kafka (produtor) | `intent.detected`/`conversation.state_changed`; já chama `conversation-memory-service` (sessão/histórico), `conversation-audit-service` (evento de jornada) e `conversation-handoff-service` (pedido de handoff) via HTTP — não persiste nada diretamente |
 | agent-runtime-renegotiation | Kafka (produtor) | `agent.events` — já chama `knowledge-service` via `GET /search` (`app/tools/knowledge.py`) |
 | tool-service-renegotiation | Kafka (produtor) | `tool.executed` |
+| agent-runtime-fatura-cartao | Kafka (produtor) | `agent.events` — sem chamada a `knowledge-service` nem `conversation-memory-service` |
+| tool-service-cartao-credito | Kafka (produtor) | `tool.executed` — chama `core-bancario-mock` (Card API) diretamente, sem autenticação |
 | conversation-memory-service | Redis; MongoDB | Redis: sessão ativa por conversa, com TTL (`GET`/`PUT`/`DELETE /sessions/{conversation_id}`). MongoDB: histórico de mensagens em `conversation_messages` (`/conversations/{id}/messages`) e fatos de memória de longo prazo em `agent_memory` (`/users/{id}/memory`) |
 | knowledge-service | OpenSearch | Índice `faq_chunks` (k-NN vector search sobre embeddings OpenAI). Ingestão de PDFs de FAQ de renegociação em `knowledge-service/data/faq_pdfs/`, no startup e via `POST /admin/reindex` |
 | conversation-audit-service | PostgreSQL | `POST /journey-events` grava uma linha em `ops.audit_events` por evento (tenant seed `demo-bank`, `actor_type='system'`, `action='conversation.journey_processed'`) |

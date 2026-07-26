@@ -1,6 +1,6 @@
 # Eventos Kafka
 
-**Fonte de verdade:** varredura do código-fonte em 2026-07-06 (ver [`services-map.md`](services-map.md)).
+**Fonte de verdade:** varredura do código-fonte em 2026-07-06, atualizada em 2026-07-26 com os produtores da skill de fatura/limite de cartão de crédito (ver [`services-map.md`](services-map.md)).
 
 ## Regra de leitura deste documento
 
@@ -15,8 +15,8 @@
 | `channel.message.status` | whatsapp-bff | Nenhum | Produzido sem consumidor |
 | `intent.detected` | conversation-orchestrator | Nenhum | Produzido sem consumidor |
 | `conversation.state_changed` | conversation-orchestrator | Nenhum | Produzido sem consumidor |
-| `agent.events` | agent-runtime-renegotiation | Nenhum | Produzido sem consumidor |
-| `tool.executed` | tool-service-renegotiation | Nenhum | Produzido sem consumidor |
+| `agent.events` | agent-runtime-renegotiation, agent-runtime-fatura-cartao | Nenhum | Produzido sem consumidor |
+| `tool.executed` | tool-service-renegotiation, tool-service-cartao-credito | Nenhum | Produzido sem consumidor |
 
 ## Tópicos configurados em consumer, mas sem producer implementado
 
@@ -49,8 +49,8 @@ Por padrão, falha ao publicar em Kafka é sempre "catch-log-continue" (nunca de
 | `channel.message.status` | whatsapp-bff | — | Auditoria/observabilidade |
 | `intent.detected` | conversation-orchestrator | — | Auditoria/observabilidade |
 | `conversation.state_changed` | conversation-orchestrator | — | Auditoria/observabilidade |
-| `agent.events` | agent-runtime-renegotiation | — | Auditoria/observabilidade |
-| `tool.executed` | tool-service-renegotiation | — | Auditoria/observabilidade |
+| `agent.events` | agent-runtime-renegotiation, agent-runtime-fatura-cartao | — | Auditoria/observabilidade |
+| `tool.executed` | tool-service-renegotiation, tool-service-cartao-credito | — | Auditoria/observabilidade |
 
 ## Decisão prática
 
