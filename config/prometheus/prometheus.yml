@@ -39,6 +39,7 @@ scrape_configs:
           - renegotiation-service:8080
           - conversation-audit-service:8080
           - conversation-handoff-service:8080
+          - core-bancario-mock:9401
 
   - job_name: python-services
     metrics_path: /metrics
