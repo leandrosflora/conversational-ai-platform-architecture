@@ -74,6 +74,8 @@ nav:
       - Agent Runtime: services/agent-runtime-renegotiation.md
       - Tool Service MCP: services/tool-service-renegotiation.md
       - Renegotiation Service: services/renegotiation-service.md
+      - Agent Runtime Fatura Cartão: services/agent-runtime-fatura-cartao.md
+      - Tool Service Cartão Crédito: services/tool-service-cartao-credito.md
       - Core Bancário Mock: services/core-bancario-mock.md
       - Knowledge Service: services/knowledge-service.md
       - Conversation Memory: services/conversation-memory-service.md
