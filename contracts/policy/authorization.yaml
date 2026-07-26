@@ -1,0 +1,44 @@
+schemaVersion: 1
+issuer: conversational-ai-platform
+tenant:
+  claim: tenant_id
+  header: X-Tenant-Id
+  format: uuid
+rules:
+  - id: whatsapp-to-orchestrator
+    caller: whatsapp-bff
+    audience: conversation-orchestrator
+    methods: [POST]
+    paths: [/messages]
+    idempotency: optional
+  - id: orchestrator-to-renegotiation-agent
+    caller: conversation-orchestrator
+    audience: agent-runtime-renegotiation
+    methods: [POST]
+    paths: [/process]
+    idempotency: none
+  - id: orchestrator-to-card-agent
+    caller: conversation-orchestrator
+    audience: agent-runtime-fatura-cartao
+    methods: [POST]
+    paths: [/process]
+    idempotency: none
+  - id: renegotiation-tool-to-domain
+    caller: tool-service-renegotiation
+    audience: renegotiation-service
+    methods: [GET, POST]
+    paths: [/clients/**, /contracts/**, /simulations/**, /agreements/**]
+    idempotency: required_for_post
+    obligations: [governed_tool, policy_id]
+  - id: domain-to-core
+    caller: renegotiation-service
+    audience: core-bancario-mock
+    methods: [GET, POST]
+    paths: [/clients/**, /contracts/**, /simulations/**, /agreements/**]
+    idempotency: required_for_post
+  - id: card-tool-to-core
+    caller: tool-service-cartao-credito
+    audience: core-bancario-mock
+    methods: [GET]
+    paths: [/clients/*/card/limit, /clients/*/card/invoice]
+    idempotency: none
