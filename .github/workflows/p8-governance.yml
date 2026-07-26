@@ -1,0 +1,61 @@
+name: P8 governance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-contract-governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install contract dependencies
+        run: python -m pip install --disable-pip-version-check pyyaml
+
+      - name: Validate Python and shell automation
+        run: |
+          python -m py_compile \
+            scripts/checkout-release.py \
+            scripts/validate-executable-contracts.py \
+            scripts/run-evals.py \
+            scripts/validate-security-control-plane.py \
+            security/control-plane/app.py
+          bash -n scripts/e2e-orchestrated.sh
+          bash -n scripts/dr-invariant-drill.sh
+          bash -n scripts/chaos-invariant-drill.sh
+          node --check tests/load/journey.js
+
+      - name: Validate executable contracts and release manifest
+        run: python scripts/validate-executable-contracts.py
+
+      - name: Execute offline AI evals
+        run: python scripts/run-evals.py --mode offline --output evals-offline.json
+
+      - name: Validate security Compose
+        run: docker compose -f docker-compose.security.yml config --quiet
+
+      - name: Test centralized OPA policy
+        run: |
+          docker run --rm \
+            -v "$PWD/security/opa:/policy:ro" \
+            openpolicyagent/opa:0.68.0-static \
+            test /policy/platform.rego /policy/platform_test.rego --verbose
+
+      - name: Upload eval evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p8-offline-evals
+          if-no-files-found: error
+          retention-days: 30
+          path: evals-offline.json
