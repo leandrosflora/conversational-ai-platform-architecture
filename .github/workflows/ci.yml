@@ -58,11 +58,31 @@ jobs:
 
   render-diagrams:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
       - name: Render C4 diagrams
         run: scripts/render-c4.sh
+
+      - name: Synchronize generated diagrams on same-repository PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git add docs/architecture/C4/c4-context.svg \
+                  docs/architecture/C4/c4-context.png \
+                  docs/architecture/C4/c4-container.svg \
+                  docs/architecture/C4/c4-container.png
+          if git diff --cached --quiet; then
+            echo "Generated diagrams already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: regenerate C4 artifacts [skip ci]"
+          git push origin "HEAD:${{ github.head_ref }}"
 
       - name: Upload generated diagrams
         uses: actions/upload-artifact@v4
