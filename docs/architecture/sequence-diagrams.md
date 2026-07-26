@@ -204,7 +204,62 @@ end note
 @enduml
 ```
 
-## 5. Garantias e limites
+## 5. Consulta de fatura/limite de cartão de crédito (segunda skill)
+
+Fluxo somente-leitura, sem simulação/confirmação/idempotência de negócio — deliberadamente mais simples que os diagramas 1 e 3, que descrevem a jornada de renegociação.
+
+```plantuml
+@startuml
+hide footbox
+autonumber
+
+actor Cliente
+participant "whatsapp-bff" as BFF
+participant "conversation-orchestrator" as Orch
+participant "agent-runtime-fatura-cartao" as Agent
+participant "tool-service-cartao-credito" as Tools
+participant "Core Bancário Mock\n(Card API :9405)" as Core
+
+Cliente -> BFF: mensagem (skill cartão de crédito)
+BFF -> Orch: POST /messages
+Orch -> Agent: POST /process\nJWT tenant_id + StructuredState
+
+activate Agent
+Agent -> Agent: guard determinístico\n(bloqueia tool call sem CPF\ninformado nesta conversa)
+
+alt CPF ainda não informado
+  Agent --> Orch: pede CPF\nState=Started
+else CPF informado
+  Agent -> Tools: MCP + JWT tool_execution\nconsultar_limite_cartao / consultar_fatura_cartao
+  activate Tools
+  Tools -> Tools: authorize_tool\n(caller_service == agent-runtime-fatura-cartao)
+  Tools -> Core: GET /clients/{cpf}/card/limit|invoice\nsem autenticação própria
+  Core --> Tools: found=false (CPF não resolve)\nou HasCard=false\nou dados do cartão
+  Tools --> Agent: resultado (ou shape "not found" fixo)
+  deactivate Tools
+  Agent --> Orch: ReplyText + State=CustomerIdentified\nStructuredState={"cpf": "..."}
+end
+deactivate Agent
+
+Orch --> BFF: 202 Accepted
+BFF --> Cliente: resposta
+
+note right of Agent
+Pergunta fora de escopo (ex.: renegociação)
+→ OutOfScope=true, sem chamar Tools;
+Orchestrator reapresenta o menu de skills.
+end note
+@enduml
+```
+
+Diferenças em relação à jornada de renegociação:
+
+- Sem `tenacity`/retry entre `agent-runtime-fatura-cartao` e `tool-service-cartao-credito` — falha de conexão MCP apenas degrada (agente segue sem a tool).
+- Sem serviço de domínio intermediário nem PostgreSQL de idempotência — `tool-service-cartao-credito` chama o Core Bancário Mock diretamente, com retry via `tenacity` (3 tentativas) só nessa borda.
+- Autorização por `caller_service`, não por estágio de jornada — não há "stage" nem "evidência de confirmação" nesse domínio, porque não há simulação/confirmação a proteger.
+- CPF nunca trafega nos eventos Kafka (`agent.events`/`tool.executed`) publicados por nenhum dos dois serviços.
+
+## 6. Garantias e limites
 
 | Aspecto | Garantia implementada |
 |---|---|

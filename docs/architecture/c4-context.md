@@ -133,6 +133,7 @@ Conjunto de sistemas responsáveis pelas operações financeiras da instituiçã
 - Simulação de renegociação.
 - Formalização de acordos.
 - Geração de documentos.
+- Consulta de limite e fatura de cartão de crédito.
 
 #### Relacionamento
 

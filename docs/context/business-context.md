@@ -87,6 +87,10 @@ A plataforma deve responder dúvidas dos clientes utilizando uma base de conheci
 
 A plataforma deve gerar propostas de renegociação conforme regras de negócio e critérios de elegibilidade.
 
+#### Consulta de Fatura e Limite de Cartão de Crédito
+
+Além da jornada de renegociação, a plataforma disponibiliza uma segunda skill de atendimento: consulta de limite total/disponível e de valor/vencimento da fatura atual do cartão de crédito do cliente, após identificação por CPF. É uma skill somente-leitura, sem simulação, negociação ou formalização — o cliente pergunta e recebe a informação. Quando o cliente pergunta algo fora desse escopo (ex.: renegociação) dentro dessa skill, a plataforma reconhece o desvio e permite reapresentar o menu de opções.
+
 #### Negociação
 
 O cliente poderá:
@@ -217,6 +221,16 @@ Entretanto, a arquitetura deve suportar futura expansão para:
 
 ---
 
+### Jornada 3 — Consulta de Fatura e Limite de Cartão de Crédito
+
+1. O cliente inicia a conversa pelo WhatsApp e escolhe (ou é roteado para) a skill de cartão de crédito.
+2. A identidade é validada por CPF.
+3. O cliente pergunta pelo limite disponível e/ou pelo valor da fatura atual.
+4. A plataforma consulta o limite e/ou a fatura no Core Bancário e responde.
+5. Caso o cliente faça uma pergunta fora desse escopo (ex.: renegociação), a plataforma sinaliza o desvio e reapresenta o menu de skills.
+
+---
+
 ## Capacidades de Inteligência Artificial
 
 ### Agente Autônomo
@@ -250,6 +264,8 @@ Exemplos:
 - Simular propostas.
 - Confirmar acordos.
 - Gerar documentos.
+- Consultar limite do cartão de crédito.
+- Consultar fatura do cartão de crédito.
 
 ---
 
