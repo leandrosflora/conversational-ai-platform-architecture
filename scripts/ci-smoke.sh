@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.override.yml)
-INFRA_SERVICES=(redis mongodb postgres opensearch kafka kafka-init jaeger loki alloy prometheus grafana)
+INFRA_SERVICES=(redis mongodb postgres opensearch kafka kafka-init jaeger loki alloy alertmanager prometheus grafana)
 
 cleanup() {
   local exit_code=$?
@@ -48,6 +48,7 @@ wait_http "OpenSearch" "http://localhost:9200/_cluster/health"
 wait_http "Jaeger" "http://localhost:16686/"
 wait_http "Loki" "http://localhost:3100/ready"
 wait_http "Grafana Alloy" "http://localhost:12345/-/ready"
+wait_http "Alertmanager" "http://localhost:9093/-/ready"
 wait_http "Prometheus" "http://localhost:9090/-/ready"
 wait_http "Grafana" "http://localhost:3001/api/health"
 
@@ -61,11 +62,33 @@ import json, sys
 payload = json.load(sys.stdin)
 targets = payload["data"]["activeTargets"]
 alloy = [t for t in targets if t.get("labels", {}).get("job") == "alloy"]
-if not alloy:
-    raise SystemExit("Prometheus target alloy not found")
-if not any(t.get("health") == "up" for t in alloy):
-    raise SystemExit("Prometheus target alloy is not UP")
-print("OK: Prometheus scrapes Grafana Alloy")
+alertmanager = [t for t in targets if t.get("labels", {}).get("job") == "alertmanager"]
+if not alloy or not any(t.get("health") == "up" for t in alloy):
+    raise SystemExit("Prometheus target alloy not found or not UP")
+if not alertmanager or not any(t.get("health") == "up" for t in alertmanager):
+    raise SystemExit("Prometheus target alertmanager not found or not UP")
+print("OK: Prometheus scrapes Alloy and Alertmanager")
+'
+
+curl --fail --silent --show-error "http://localhost:9090/api/v1/rules" | python3 -c '
+import json, sys
+payload = json.load(sys.stdin)
+groups = payload.get("data", {}).get("groups", [])
+names = {group.get("name") for group in groups}
+required = {"platform-infrastructure", "conversational-ai-consistency"}
+missing = required - names
+if missing:
+    raise SystemExit(f"Prometheus rule groups missing: {sorted(missing)}")
+print("OK: Prometheus alert rules loaded")
+'
+
+curl --fail --silent --show-error "http://localhost:9090/api/v1/alertmanagers" | python3 -c '
+import json, sys
+payload = json.load(sys.stdin)
+active = payload.get("data", {}).get("activeAlertmanagers", [])
+if not active:
+    raise SystemExit("Prometheus has no active Alertmanager")
+print("OK: Prometheus discovered Alertmanager")
 '
 
 for datasource in prometheus loki jaeger; do
