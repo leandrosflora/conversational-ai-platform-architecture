@@ -14,6 +14,8 @@ workspace/
 ├── agent-runtime-renegotiation/
 ├── tool-service-renegotiation/
 ├── renegotiation-service/
+├── agent-runtime-fatura-cartao/
+├── tool-service-cartao-credito/
 ├── knowledge-service/
 ├── conversation-memory-service/
 ├── conversation-audit-service/
@@ -27,7 +29,7 @@ O Renegotiation Service envia JWT, tenant e `Idempotency-Key`, mas o `core-banca
 
 ## 2. Configuração obrigatória
 
-Crie `.env` na raiz de `conversational-ai-demo-arch`. Desde a mudança `per-service-internal-auth-secrets`, cada par (emissor, audiência) de chamada interna tem seu próprio segredo — não existe mais um `INTERNAL_AUTH_SIGNING_KEY` único. Gere os 10 valores (cada um com pelo menos 32 bytes, ex: `python -c "import secrets; print(secrets.token_urlsafe(48))"`); a lista completa e comentada está em `.env.example`:
+Crie `.env` na raiz de `conversational-ai-demo-arch`. Desde a mudança `per-service-internal-auth-secrets`, cada par (emissor, audiência) de chamada interna tem seu próprio segredo — não existe mais um `INTERNAL_AUTH_SIGNING_KEY` único. Gere os 12 valores (cada um com pelo menos 32 bytes, ex: `python -c "import secrets; print(secrets.token_urlsafe(48))"`); a lista completa e comentada está em `.env.example`:
 
 ```dotenv
 INTERNAL_AUTH_SECRET_WHATSAPP_BFF__CONVERSATION_ORCHESTRATOR=<segredo>
@@ -40,10 +42,14 @@ INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__TOOL_SERVICE_RENEGOTIATION=<se
 INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__KNOWLEDGE_SERVICE=<segredo>
 INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__CONVERSATION_MEMORY_SERVICE=<segredo>
 INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE=<segredo>
+INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO=<segredo>
+INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO=<segredo>
 DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
 OPENAI_API_KEY=
 MOCK_AGENT_ENABLED=true
 ```
+
+`tool-service-cartao-credito` não recebe segredo outbound: ele chama `core-bancario-mock` diretamente, que não tem autenticação própria (ver [`docs/services/tool-service-cartao-credito.md`](services/tool-service-cartao-credito.md)).
 
 Gere uma chave local:
 
@@ -93,6 +99,8 @@ Repositórios:
 
 - `agent-runtime-renegotiation`;
 - `tool-service-renegotiation`;
+- `agent-runtime-fatura-cartao`;
+- `tool-service-cartao-credito`;
 - `knowledge-service`;
 - `conversation-memory-service`.
 
@@ -123,14 +131,17 @@ A sobreposição `docker-compose.override.yml` adiciona:
 | whatsapp-bff | `5153` | `http://localhost:5153/health/ready` |
 | conversation-orchestrator | `5268` | `http://localhost:5268/health/ready` |
 | agent-runtime-renegotiation | `8100` | `http://localhost:8100/health/ready` |
+| agent-runtime-fatura-cartao | `8110` | `http://localhost:8110/health/ready` |
 | conversation-handoff-service | `8200` | `http://localhost:8200/health/ready` |
 | conversation-audit-service | `8300` | `http://localhost:8300/health/ready` |
-| tool-service MCP | `8400` | health no REST |
-| tool-service REST | `8401` | `http://localhost:8401/health/ready` |
+| tool-service-renegotiation MCP | `8400` | health no REST |
+| tool-service-renegotiation REST | `8401` | `http://localhost:8401/health/ready` |
+| tool-service-cartao-credito MCP | `8410` | health no REST |
+| tool-service-cartao-credito REST | `8411` | `http://localhost:8411/health/ready` |
 | knowledge-service | `8500` | `http://localhost:8500/health/ready` |
 | conversation-memory-service | `8600` | `http://localhost:8600/health/ready` |
 | renegotiation-service | `5266` | `http://localhost:5266/health/ready` |
-| Core mock | `9401`–`9404` | pendente |
+| Core mock | `9401`–`9405` | pendente |
 | Kafka UI | `8080` | UI |
 | Jaeger | `16686` | UI |
 | Prometheus | `9090` | UI |
@@ -180,6 +191,8 @@ mesmo contexto da jornada
 ```
 
 O `policy_id` precisa ser igual ao `Idempotency-Key` da operação.
+
+> As seções 7 a 15 descrevem as garantias de consistência P0 (Inbox/Outbox, idempotência de simulação, policy enforcement por estágio) implementadas para a jornada de **renegociação**. A skill de **fatura/limite de cartão de crédito** (`agent-runtime-fatura-cartao` → `tool-service-cartao-credito` → `core-bancario-mock`) é somente-leitura e não tem equivalente a nenhuma delas por desenho — sem tabela de idempotência própria, sem policy por estágio de jornada (autorização é só por serviço chamador) e sem retry entre agente e tool service. Ver [diagrama de sequência §5](architecture/sequence-diagrams.md#5-consulta-de-faturalimite-de-cartao-de-credito-segunda-skill).
 
 ## 7. Persistência e migrações
 
@@ -373,6 +386,7 @@ Também monitorar via SQL:
 ## 16. Limitações restantes
 
 - Core mock ainda não valida JWT, policy proof e idempotência;
+- a skill de fatura/limite de cartão de crédito não tem Inbox/Outbox, idempotência de simulação nem policy por estágio — não é uma lacuna, é porque a skill é somente-leitura e não tem operação a proteger;
 - HS256 compartilhado não é identidade final;
 - Handoff não integra plataforma humana;
 - Kafka/OpenSearch/Redis/PostgreSQL locais não representam configuração de produção;
@@ -405,4 +419,4 @@ Use `producer.list_topics(timeout=1)`. O argumento posicional `1` seria interpre
 
 ### Compose falha com `Set INTERNAL_AUTH_SECRET_<PAR> in .env`
 
-Falta uma das 10 variáveis de segredo por par em `.env` — veja a lista completa em `.env.example`. Cada uma é independente; não versionar valores reais.
+Falta uma das 12 variáveis de segredo por par em `.env` — veja a lista completa em `.env.example`. Cada uma é independente; não versionar valores reais.
