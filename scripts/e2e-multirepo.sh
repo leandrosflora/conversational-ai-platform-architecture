@@ -8,6 +8,8 @@ ARTIFACT_DIR=${ARTIFACT_DIR:-"$ARCH_ROOT/artifacts/e2e"}
 RUN_ID=${RUN_ID:-"e2e-$(date -u +%Y%m%dT%H%M%SZ)"}
 MESSAGE_ID="wamid.${RUN_ID}"
 PHONE_NUMBER=${E2E_PHONE_NUMBER:-5511999999999}
+CORE_RENEGOTIATION_TOKEN_FILE=/tmp/core-renegotiation.jwt
+CORE_CARD_TOKEN_FILE=/tmp/core-card.jwt
 
 DOTNET_REPOS=(
   whatsapp-bff
@@ -33,6 +35,7 @@ mkdir -p "$ARTIFACT_DIR"
 
 cleanup() {
   local exit_code=$?
+  rm -f "$CORE_RENEGOTIATION_TOKEN_FILE" "$CORE_CARD_TOKEN_FILE"
   if (( exit_code != 0 )); then
     "${COMPOSE[@]}" ps >"$ARTIFACT_DIR/compose-ps.txt" 2>&1 || true
     "${COMPOSE[@]}" logs --no-color --tail=400 >"$ARTIFACT_DIR/compose-logs.txt" 2>&1 || true
@@ -77,7 +80,7 @@ for repo in "${DOTNET_REPOS[@]}"; do
   dotnet build --no-restore --configuration Release
   mapfile -t tests < <(find . -name '*Tests.csproj' -print)
   if ((${#tests[@]})); then
-    dotnet test --no-build --configuration Release
+    dotnet test --configuration Release
   fi
   popd >/dev/null
   echo "::endgroup::"
@@ -103,6 +106,9 @@ done
 
 pushd "$ARCH_ROOT" >/dev/null
 scripts/write-ci-env.sh
+set -a
+source .env
+set +a
 "${COMPOSE[@]}" config --quiet
 "${COMPOSE[@]}" up -d --build
 
@@ -117,19 +123,50 @@ wait_http "tool-service-cartao-credito" "http://localhost:8411/health/ready"
 wait_http "knowledge-service" "http://localhost:8500/health/ready"
 wait_http "conversation-memory-service" "http://localhost:8600/health/ready"
 wait_http "renegotiation-service" "http://localhost:5266/health/ready"
-wait_http "core-bancario-mock" "http://localhost:9401/clients/11111111111"
+wait_http "core-bancario-mock" "http://localhost:9401/health/ready"
 
-export MESSAGE_ID PHONE_NUMBER
+export MESSAGE_ID PHONE_NUMBER DEFAULT_TENANT_ID
+export INTERNAL_AUTH_SECRET_RENEGOTIATION_SERVICE__CORE_BANCARIO_MOCK
+export INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK
+export CORE_RENEGOTIATION_TOKEN_FILE CORE_CARD_TOKEN_FILE
 python - <<'PY'
+import base64
 import hashlib
 import hmac
 import json
 import os
 import time
+import uuid
 from pathlib import Path
+
+
+def b64url(raw: bytes) -> bytes:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=")
+
+
+def issue_token(caller: str, secret: str, tenant: str) -> str:
+    now = int(time.time())
+    header = {"alg": "HS256", "typ": "JWT", "kid": caller}
+    payload = {
+        "iss": "conversational-ai-platform",
+        "sub": caller,
+        "aud": "core-bancario-mock",
+        "iat": now,
+        "nbf": now - 1,
+        "exp": now + 300,
+        "jti": uuid.uuid4().hex,
+        "tenant_id": tenant,
+    }
+    encoded_header = b64url(json.dumps(header, separators=(",", ":")).encode())
+    encoded_payload = b64url(json.dumps(payload, separators=(",", ":")).encode())
+    signing_input = encoded_header + b"." + encoded_payload
+    signature = b64url(hmac.new(secret.encode(), signing_input, hashlib.sha256).digest())
+    return (signing_input + b"." + signature).decode()
+
 
 message_id = os.environ["MESSAGE_ID"]
 phone = os.environ["PHONE_NUMBER"]
+tenant = os.environ["DEFAULT_TENANT_ID"]
 payload = {
     "object": "whatsapp_business_account",
     "entry": [{
@@ -155,11 +192,28 @@ payload = {
     }],
 }
 raw = json.dumps(payload, separators=(",", ":")).encode()
-secret = "placeholder"
-signature = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+webhook_secret = "placeholder"
+signature = hmac.new(webhook_secret.encode(), raw, hashlib.sha256).hexdigest()
 Path("artifacts/e2e/webhook.json").write_bytes(raw)
 Path("artifacts/e2e/webhook.signature").write_text(f"sha256={signature}", encoding="utf-8")
+Path(os.environ["CORE_RENEGOTIATION_TOKEN_FILE"]).write_text(
+    issue_token(
+        "renegotiation-service",
+        os.environ["INTERNAL_AUTH_SECRET_RENEGOTIATION_SERVICE__CORE_BANCARIO_MOCK"],
+        tenant,
+    ),
+    encoding="utf-8",
+)
+Path(os.environ["CORE_CARD_TOKEN_FILE"]).write_text(
+    issue_token(
+        "tool-service-cartao-credito",
+        os.environ["INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK"],
+        tenant,
+    ),
+    encoding="utf-8",
+)
 PY
+chmod 600 "$CORE_RENEGOTIATION_TOKEN_FILE" "$CORE_CARD_TOKEN_FILE"
 
 curl --fail --silent --show-error \
   -H "Content-Type: application/json" \
@@ -183,10 +237,39 @@ for ((i=1; i<=90; i++)); do
 done
 test "$INBOX_COUNT" != "0"
 
-curl --fail --silent --show-error http://localhost:9405/clients/11111111111/card/limit \
+CORE_CARD_TOKEN=$(cat "$CORE_CARD_TOKEN_FILE")
+CORE_RENEGOTIATION_TOKEN=$(cat "$CORE_RENEGOTIATION_TOKEN_FILE")
+CORE_AUTH_CARD=(-H "Authorization: Bearer $CORE_CARD_TOKEN" -H "X-Tenant-Id: $DEFAULT_TENANT_ID")
+CORE_AUTH_RENEGOTIATION=(-H "Authorization: Bearer $CORE_RENEGOTIATION_TOKEN" -H "X-Tenant-Id: $DEFAULT_TENANT_ID")
+
+curl --fail --silent --show-error "${CORE_AUTH_CARD[@]}" \
+  http://localhost:9405/clients/11111111111/card/limit \
   | tee "$ARTIFACT_DIR/card-limit.json"
-curl --fail --silent --show-error http://localhost:9401/clients/11111111111 \
+curl --fail --silent --show-error "${CORE_AUTH_RENEGOTIATION[@]}" \
+  http://localhost:9401/clients/11111111111 \
   | tee "$ARTIFACT_DIR/client.json"
+
+SIMULATION_KEY="e2e-core-simulation-${RUN_ID}"
+SIMULATION_BODY='{"installments":12,"discount_percentage":10}'
+for output in core-simulation-first.json core-simulation-replay.json; do
+  curl --fail --silent --show-error "${CORE_AUTH_RENEGOTIATION[@]}" \
+    -H "Content-Type: application/json" \
+    -H "Idempotency-Key: $SIMULATION_KEY" \
+    --data "$SIMULATION_BODY" \
+    http://localhost:9403/contracts/11111111111-contract-1/simulations \
+    >"$ARTIFACT_DIR/$output"
+done
+cmp "$ARTIFACT_DIR/core-simulation-first.json" "$ARTIFACT_DIR/core-simulation-replay.json"
+
+CONFLICT_STATUS=$(curl --silent --output "$ARTIFACT_DIR/core-simulation-conflict.json" --write-out '%{http_code}' \
+  "${CORE_AUTH_RENEGOTIATION[@]}" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $SIMULATION_KEY" \
+  --data '{"installments":24,"discount_percentage":10}' \
+  http://localhost:9403/contracts/11111111111-contract-1/simulations)
+test "$CONFLICT_STATUS" = "409"
+
+echo "OK: Core auth, replay and payload conflict validated"
 
 "${COMPOSE[@]}" exec -T postgres psql -U postgres -d conversational_ai -P pager=off \
   -c "select tenant_id, message_id, status, completion_reason, attempt_count, last_error from ops.message_inbox order by received_at desc limit 20;" \
