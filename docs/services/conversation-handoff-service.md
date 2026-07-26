@@ -8,7 +8,7 @@ Handoff Service real da plataforma: recebe um pedido de transferência para aten
 
 ## Dados que o serviço possui
 
-Nenhum modelo de domínio próprio além do DTO de entrada (`HandoffRequestRecord`: `ConversationId`, `Reason`) — todo o estado persistido vive na tabela `conversation.handoffs`, já provisionada no schema `conversation`.
+Nenhum modelo de domínio próprio além do DTO de entrada (`HandoffRequestRecord`: `ConversationId`, `Reason`) — todo o estado persistido vive na tabela `conversation.handoffs`, já provisionada no schema `conversation`. A coluna `idempotency_key` (adicionada depois da tabela original) guarda o header de idempotência do request.
 
 ## APIs publicadas
 
@@ -16,7 +16,9 @@ Nenhum modelo de domínio próprio além do DTO de entrada (`HandoffRequestRecor
 |---|---|---|
 | `POST` | `/handoffs` | Recebe `{ conversationId, reason }` e grava uma linha em `conversation.handoffs` antes de responder |
 
-Validação: `400 Bad Request` se `conversationId` ou `reason` estiverem ausentes. Sucesso: `202 Accepted` (sem corpo) só depois que a escrita no Postgres é confirmada. `503 Service Unavailable` se o PostgreSQL estiver inacessível — nunca um hang ou um `500` cru.
+Requer `Authorization: Bearer <JWT interno>`, `X-Tenant-Id` batendo com a claim `tenant_id` assinada, e um header `Idempotency-Key`.
+
+Validação: `401` sem JWT válido; `403` se `X-Tenant-Id` não bater com a claim assinada; `400 Bad Request` se `Idempotency-Key`, `conversationId` ou `reason` estiverem ausentes. Sucesso: `202 Accepted` (sem corpo) só depois que a escrita no Postgres é confirmada. `503 Service Unavailable` se o PostgreSQL estiver inacessível — nunca um hang ou um `500` cru.
 
 ## Eventos publicados
 
@@ -33,14 +35,14 @@ Nenhuma chamada HTTP a outro serviço — a única dependência é o PostgreSQL 
 ## Persistência & infraestrutura
 
 - **PostgreSQL** (`conversation.handoffs`) — único armazenamento do serviço, via `Npgsql` direto (sem ORM), mesmo padrão do `conversation-audit-service` (`NpgsqlDataSource` singleton, `Timeout=5s`/`CommandTimeout=5s` forçados).
-- **A FK de `conversation.handoffs.conversation_id`** exige uma linha existente em `conversation.conversations` — tabela que nenhum serviço deste workspace popula de verdade (não existe resolução de telefone → UUID de conversa em lugar nenhum). Toda linha usa a conversa seed já provisionada (`70000000-0000-0000-0000-000000000001`, tenant `demo-bank`) como FK fixa; o ID real da conversa (o telefone) vai em `metadata.externalConversationId`, para não se perder.
+- Cada linha agora também grava `tenant_id` diretamente (coluna adicionada depois da tabela original) — mas **a FK de `conversation.handoffs.conversation_id`** continua exigindo uma linha existente em `conversation.conversations`, tabela que nenhum serviço deste workspace popula de verdade (não existe resolução de telefone → UUID de conversa em lugar nenhum). Toda linha continua usando a conversa seed já provisionada (`70000000-0000-0000-0000-000000000001`) como FK fixa; o ID real da conversa (o telefone) vai em `metadata.externalConversationId`/`metadata.tenantId`, para não se perder.
 - `target_queue` é sempre o literal `"human-support"` — não existe conceito de fila/roteamento por skill neste workspace ainda.
 - `status` fica no valor default da tabela (`"pending"`) — não há fluxo de aceitar/fechar um handoff implementado (as colunas `accepted_at`/`closed_at` existem no schema, mas nada os escreve).
 
 ## Regras de negócio
 
-1. Toda linha de handoff aponta para a mesma conversa seed — duas conversas reais diferentes só se distinguem por `metadata.externalConversationId`, nunca por `conversation_id`. Aceitável porque nenhuma ferramenta de operador consulta `conversation.handoffs` ainda.
-2. Não há chave de deduplicação: um retry de rede do lado do Orchestrator pode gerar duas linhas para o mesmo pedido de handoff — mesmo trade-off já aceito no Audit Service.
+1. Toda linha de handoff aponta para a mesma conversa seed via FK — duas conversas reais diferentes se distinguem pela coluna `tenant_id` e por `metadata.externalConversationId`, nunca por `conversation_id`. Aceitável porque nenhuma ferramenta de operador consulta `conversation.handoffs` ainda.
+2. **Deduplicado por `(tenant_id, idempotency_key)`**: o insert usa `ON CONFLICT (tenant_id, idempotency_key) DO NOTHING`, sustentado por um índice único migrado (`ux_handoffs_tenant_idempotency_key`) — mesma migração de idempotência aplicada ao Audit Service. Um retry de rede do lado do Orchestrator com a mesma `Idempotency-Key` não gera uma segunda linha.
 3. Indisponibilidade do Postgres nunca vira um `500` genérico nem trava a requisição — sempre `503`, dentro do timeout configurado (5s).
 
 ## Referências de arquitetura

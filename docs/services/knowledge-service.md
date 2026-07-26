@@ -8,16 +8,16 @@ Serviço de RAG (retrieval-augmented generation) para FAQ de renegociação: ing
 
 ## Dados que o serviço possui
 
-Nenhum modelo de domínio próprio em memória — todo o estado vive no índice OpenSearch `faq_chunks` (um documento por chunk: `text`, `title`, `sourceFile`, `chunkIndex`, `contentHash`, `createdAt`, `embedding` — vetor k-NN de 1536 dimensões, `hnsw`/`cosinesimil`/engine `lucene`).
+Nenhum modelo de domínio próprio em memória — todo o estado vive no OpenSearch, num **índice por tenant** `faq_chunks-{tenantId}` (um documento por chunk: `text`, `title`, `sourceFile`, `chunkIndex`, `contentHash`, `createdAt`, `tenantId`, `embedding` — vetor k-NN de 1536 dimensões, `hnsw`/`cosinesimil`/engine `lucene`).
 
 ## APIs publicadas
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/search?query=...` | Embeda a query, faz k-NN search no índice, filtra por `min_relevance_score` (default `0.70`) e devolve os resultados ordenados por score |
-| `POST` | `/admin/reindex` | Reprocessa todo `.pdf` em `data/faq_pdfs/` sob demanda, sem reiniciar o processo |
+| `GET` | `/search?query=...` | Embeda a query, faz k-NN search no índice do tenant atual, filtra por `min_relevance_score` (default `0.70`) e devolve os resultados ordenados por score |
+| `POST` | `/admin/reindex` | Reprocessa `.pdf`s do tenant atual sob demanda, sem reiniciar o processo |
 
-`GET /search` responde `200 OK` com `results: []` quando nada relevante é encontrado — isso é um resultado normal, não um erro. Ambos os endpoints respondem `503 Service Unavailable` (nunca `500`/hang) quando o OpenSearch ou a OpenAI Embeddings API estão inacessíveis (`KnowledgeBackendUnavailableError`, mapeada por um exception handler central em `app/main.py`).
+Ambos os endpoints exigem tenant resolvido — `400` (`X-Tenant-Id` malformado), `401` (bearer token ausente/inválido) ou `403` (claim de tenant não bate) antes mesmo de chegar no handler. `GET /search` responde `200 OK` com `results: []` quando nada relevante é encontrado — isso é um resultado normal, não um erro. Ambos os endpoints respondem `503 Service Unavailable` (nunca `500`/hang) quando o OpenSearch ou a OpenAI Embeddings API estão inacessíveis (`KnowledgeBackendUnavailableError`, mapeada por um exception handler central em `app/main.py`).
 
 ## Eventos publicados
 
@@ -36,8 +36,8 @@ Nenhum.
 
 ## Persistência & infraestrutura
 
-- **OpenSearch** (`faq_chunks`): único armazenamento real do serviço — chunks de texto + embeddings, busca k-NN.
-- Ingestão de PDFs lê de `data/faq_pdfs/` (bind mount no `docker-compose.yml`, para que um PDF solto ali sem rebuild de imagem já seja visível a `POST /admin/reindex`).
+- **OpenSearch** (`faq_chunks-{tenantId}`, um índice por tenant): único armazenamento real do serviço — chunks de texto + embeddings, busca k-NN.
+- Ingestão de PDFs lê de `data/faq_pdfs/{tenantId}/` (bind mount no `docker-compose.yml`, para que um PDF solto ali sem rebuild de imagem já seja visível a `POST /admin/reindex`) — o tenant seed do ambiente local cai de volta para a raiz `data/faq_pdfs/` quando não existe uma subpasta específica para ele, por compatibilidade com o conteúdo de demo já existente antes da mudança para multi-tenant.
 - Sem banco relacional/documento.
 
 ## Regras de negócio

@@ -19,7 +19,7 @@ Nenhum modelo persistido — `ProcessRequest`/`ProcessResponse` (Pydantic, `app/
 Request (`ProcessRequest`, PascalCase — espelha o que o Orchestrator envia): `TenantId`, `ConversationId`, `MessageId`, `MessageType`, `Text?`, `State?`, `JourneyVersion?`, `LastIntent?`, `StructuredState?` (dict opaco, chave `cpf`), `SessionReset?`, `SessionStartedAt?`.
 Response (`ProcessResponse`, PascalCase): `Intent?`, `Confidence` (default `0.0`), `ReplyText?`, `RequiresHandoff` (default `false`), `HandoffReason?`, `State` (`Started`/`CustomerIdentified`), `StructuredState?` (`{"cpf": "..."}` uma vez identificado), `OutOfScope` (`true` quando a pergunta não é sobre limite/fatura — sinaliza ao orquestrador para resetar o menu de skills).
 
-Erros: `400` se `X-Tenant-Id`/claim/`TenantId` do payload não baterem; `401` sem JWT interno válido; `422` se campos obrigatórios faltarem.
+Erros: `400` se o payload `TenantId` não bater com o `X-Tenant-Id`/claim já resolvidos; `403` se a claim `tenant_id` assinada estiver ausente ou não bater com o header `X-Tenant-Id` (checado antes do payload); `401` sem JWT interno válido/expirado; `422` se campos obrigatórios faltarem.
 
 ## Eventos publicados
 
@@ -37,7 +37,7 @@ Nenhum.
 
 | Destino | Protocolo | Comportamento se indisponível |
 |---|---|---|
-| OpenAI (`gpt-4o-mini` por padrão) | SDK Strands, via `OpenAIModel` | Timeout de 45s (`asyncio.wait_for`) → `requires_handoff=true`, `handoff_reason="agent_runtime_timeout"`. Qualquer outra exceção → `requires_handoff=true`, `handoff_reason="agent_runtime_unavailable"`. Sem retry/tenacity — degrada direto para handoff |
+| OpenAI (`gpt-4o-mini` por padrão) | SDK Strands, via `OpenAIModel` | Timeout de 45s (`asyncio.wait_for`) → `requires_handoff=true`, `handoff_reason="agent_runtime_timeout"`. Qualquer outra exceção → `requires_handoff=true`, `handoff_reason="agent_runtime_unavailable"`. Sem retry/tenacity — degrada direto para handoff. **Só é chamada quando `MOCK_AGENT_ENABLED=false`** — no `docker-compose.yml` deste repositório o default é `${MOCK_AGENT_ENABLED:-true}`, então por padrão o ambiente local usa `app/agent/mock.py` (decisão determinística por palavra-chave) e nunca invoca a OpenAI de verdade, mesma convenção do `agent-runtime-renegotiation` |
 | `tool-service-cartao-credito` (`:8410`, MCP) | streamable-HTTP, via `strands.tools.mcp.MCPClient`, token assinado por requisição (`token_use: tool_execution`) | Se a conexão/listagem de tools falhar, o agente segue sem essas tools (não bloqueia o request), apenas loga warning |
 
 Não chama `conversation-memory-service` nem `knowledge-service` (diferente de `agent-runtime-renegotiation`).

@@ -16,8 +16,12 @@ Nenhum modelo persistido — `ProcessRequest`/`ProcessResponse` (Pydantic, `app/
 |---|---|---|
 | `POST` | `/process` | Processa uma mensagem e devolve a decisão do agente |
 
-Request (`ProcessRequest`, PascalCase — espelha o que o Orchestrator envia): `ConversationId`, `MessageType`, `Text?`, `JourneyStage?`, `LastIntent?`.
-Response (`ProcessResponse`, PascalCase): `Intent?`, `Confidence` (default `0.0`), `ReplyText?`, `RequiresHandoff` (default `false`), `HandoffReason?`. Sempre `200 OK` — não há tratamento explícito de exceção não capturada em `main.py`, o design assume que a lógica do agente nunca propaga.
+Requer `Authorization: Bearer <JWT interno>` e `X-Tenant-Id` batendo com a claim `tenant_id` assinada.
+
+Request (`ProcessRequest`, PascalCase — mesmo contrato genérico skill-agnostic usado por `agent-runtime-fatura-cartao`, já que `conversation-orchestrator` roteia entre as duas skills): `TenantId`, `ConversationId`, `MessageId`, `MessageType`, `Text?`, `State?` (era `JourneyStage?`; hoje é uma string opaca que só esta skill interpreta), `JourneyVersion` (default `0`), `LastIntent?`, `StructuredState?` (dict opaco: `contract_id`, `simulation_id`, `agreement_id`, `offered_alternative_contract_id`), `SessionReset` (default `false`), `SessionStartedAt?`.
+Response (`ProcessResponse`, PascalCase): `Intent?`, `Confidence` (default `0.0`), `ReplyText?`, `RequiresHandoff` (default `false`), `HandoffReason?`, `State?`, `StructuredState?`.
+
+Erros: `400` se `X-Tenant-Id`/claim/`TenantId` do payload não baterem; `401` sem JWT interno válido; `422` se campos obrigatórios faltarem. Diferente do que uma versão anterior deste documento afirmava, o endpoint **não** devolve sempre `200` — o handler tem um `except Exception: raise` explícito (`app/main.py`) que apenas incrementa uma métrica antes de repropagar, então uma falha não prevista (ex.: erro no client MCP fora do caminho já tratado) vira `500`. Falhas *esperadas* do LLM (ver "Regras de negócio") continuam degradando para uma decisão de handoff em vez de erro.
 
 ## Eventos publicados
 
@@ -34,7 +38,7 @@ Nenhum.
 | Destino | Protocolo | Comportamento se indisponível |
 |---|---|---|
 | `conversation-memory-service` (`:8600`) | `GET /conversations/{conversationId}/messages` (httpx) | Chamado antes do agente ser construído, só no caminho real (pulado quando `MOCK_AGENT_ENABLED=true`). Retry via `tenacity` (padrão: 3 tentativas, 0.2s entre elas); se todas falharem, degrada para histórico vazio — nunca lança exceção, nunca bloqueia o request |
-| `tool-service-renegotiation` (`:8400`, MCP) | streamable-HTTP, via `strands.tools.mcp.MCPClient` | Se a conexão/listagem de tools falhar, o agente segue sem essas tools (não bloqueia o request) |
+| `tool-service-renegotiation` (`:8400`, MCP) | streamable-HTTP, via `strands.tools.mcp.MCPClient`, com contexto de governança assinado por chamada (`conversation_id`, `message_id`, `journey_stage`, `journey_version`, `confirmation_message_id` quando a mensagem é uma confirmação explícita) — é esse contexto que `tool-service-renegotiation` valida antes de autorizar qualquer tool | Se a conexão/listagem de tools falhar, o agente segue sem essas tools (não bloqueia o request) |
 | OpenAI (`gpt-4o-mini` por padrão) | SDK Strands, via `OpenAIModel` | Sem `OPENAI_API_KEY` ou falha do modelo → captura genérica → degrada para decisão de handoff (`requires_handoff=true`, `handoff_reason="agent_runtime_unavailable"`) |
 | Knowledge Service (`:8500`) | `GET /search?query=...` (httpx) | Retry via `tenacity` (3 tentativas, 0.2s entre elas); se todas falharem, retorna ao agente a string `"Base de conhecimento indisponivel no momento."` em vez de erro |
 
