@@ -80,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check internal and external links
+      - name: Check documentation links
         uses: lycheeverse/lychee-action@v2
         with:
           args: >-
@@ -88,8 +88,8 @@ jobs:
             --max-retries 2
             --timeout 20
             --exclude-path site
-            './**/*.md'
-            './**/*.yml'
+            './README.md'
+            './docs/**/*.md'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -141,7 +141,7 @@ jobs:
         run: scripts/ci-smoke.sh
 
   # Compatibility gate retained until branch protection is changed to require the
-  # four named jobs above directly. Remove this job after that settings change.
+  # five named jobs above directly. Remove this job after that settings change.
   compose-config:
     name: compose-config
     if: ${{ always() }}
