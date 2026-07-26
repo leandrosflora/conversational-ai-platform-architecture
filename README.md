@@ -3,109 +3,113 @@
 [![Documentation](https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs&logoColor=white)](https://leandrosflora.github.io/conversational-ai-platform-architecture/)
 [![Publish MkDocs](https://github.com/leandrosflora/conversational-ai-platform-architecture/actions/workflows/docs.yml/badge.svg)](https://github.com/leandrosflora/conversational-ai-platform-architecture/actions/workflows/docs.yml)
 
-**Documentação publicada:** https://leandrosflora.github.io/conversational-ai-platform-architecture/
+Arquitetura de referência executável para plataformas de IA conversacional com agentes, MCP, RAG, WhatsApp, APIs corporativas, consistência transacional e observabilidade.
 
-Arquitetura de referência para plataformas de IA conversacional utilizando agentes, MCP, RAG, WhatsApp, APIs corporativas e observabilidade ponta a ponta.
+**Documentação:** https://leandrosflora.github.io/conversational-ai-platform-architecture/
 
-## Documentação
+## Documentação principal
 
-- [Contexto de negócio](docs/context/business-context.md) — jornadas, personas e escopo.
-- [C4 nível 1](docs/architecture/c4-context.md) — separação explícita entre estado implementado e arquitetura-alvo corporativa.
-- [Diagramas de sequência da jornada](docs/architecture/sequence-diagrams.md) — passo a passo técnico, do webhook do WhatsApp até a consulta de débitos/elegibilidade.
-- [Páginas de referência por serviço](docs/services/) — responsabilidade, APIs, eventos e regras de negócio de cada um dos 12 serviços implementados.
-- [Contratos](docs/contracts/) — mapa de serviços, matriz de eventos Kafka, datastores.
-- [ADRs](docs/adr/) — decisões de arquitetura já implementadas no código.
-- [Arquitetura de segurança](docs/security/security-architecture.md).
-- [Runbook do ambiente local](docs/runbook.md) — como subir a infraestrutura e os serviços de aplicação.
-- [Plano de atualização de dependências](docs/roadmap/platform-dependency-upgrades.md) — Kafka, Jaeger e Loki.
-- [Validações E2E](docs/validation/) — execuções reais da jornada completa contra os serviços rodando, comparando comportamento observado com o que os docs afirmam.
+- [Contexto de negócio](docs/context/business-context.md)
+- [Arquitetura C4](docs/architecture/c4-context.md)
+- [Jornadas e sequências](docs/architecture/sequence-diagrams.md)
+- [Mapa de serviços](docs/contracts/services-map.md)
+- [Contratos Kafka](docs/contracts/kafka-events.md)
+- [Ownership de dados](docs/contracts/data-stores.md)
+- [Arquitetura de segurança](docs/security/security-architecture.md)
+- [Runbook](docs/runbook.md)
+- [SLOs e alertas](docs/operations/slo-alerting.md)
+- [Backup e recuperação](docs/operations/disaster-recovery.md)
+- [Retenção e LGPD](docs/governance/data-retention-lgpd.md)
+- [Carga e caos](docs/testing/load-and-chaos.md)
+- [Roadmap de produção](docs/roadmap/production-readiness.md)
 
 ## Ambiente local
 
-Subir infraestrutura local:
-
 ```bash
-docker compose up -d
+scripts/write-ci-env.sh
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
 ```
 
-Parar e remover containers:
+Parar:
 
 ```bash
-docker compose down
+docker compose -f docker-compose.yml -f docker-compose.override.yml down
 ```
 
-Remover containers e volumes:
+### Infraestrutura
 
-```bash
-docker compose down -v
-```
+| Serviço | Porta |
+|---|---:|
+| Redis | `6379` |
+| MongoDB | `27018` |
+| PostgreSQL | `5432` |
+| Kafka | `29092` |
+| Kafka UI | `8080` |
+| OpenSearch | `9200` |
+| Jaeger | `16686` |
+| Loki | `3100` |
+| Grafana Alloy | `12345` |
+| Prometheus | `9090` |
+| Alertmanager | `9093` |
+| Grafana | `3001` |
 
-### Serviços
+Grafana é provisionado com Prometheus, Loki e Jaeger. Alloy coleta logs de containers. Prometheus carrega regras versionadas e envia alertas para o Alertmanager local.
 
-| Serviço | URL/porta local | Credenciais |
-| --- | --- | --- |
-| Redis | `localhost:6379` | - |
-| MongoDB | `localhost:27018` | `admin/admin` |
-| PostgreSQL | `localhost:5432` | `postgres/postgres` |
-| Kafka | `localhost:29092` | - |
-| OpenSearch | `localhost:9200` | - |
-| Jaeger UI | `localhost:16686` | - |
-| Loki | `localhost:3100` | - |
-| Grafana Alloy | `localhost:12345` | - |
-| Prometheus | `localhost:9090` | - |
-| Grafana | `localhost:3001` | `admin/admin` |
-
-### Observabilidade
-
-O Grafana sobe provisionado com datasources para Prometheus, Loki e Jaeger. O Grafana Alloy descobre os containers pelo Docker socket, preserva os labels `container`, `service` e `stream` e envia os logs ao Loki. O Prometheus coleta métricas dele mesmo, do Jaeger, do Alloy e dos endpoints `/metrics` declarados para os serviços de aplicação.
-
-Os serviços já propagam `TraceId`/`SpanId`/`CorrelationId` e exportam traces por OTLP quando instrumentados. Nem todos os endpoints de métricas de aplicação estão implementados; portanto, alguns targets podem aparecer como `DOWN` sem comprometer a saúde da infraestrutura local.
-
-Promtail não é mais iniciado no stack padrão. Ele permanece apenas no perfil de rollback explícito:
-
-```bash
-docker compose --profile legacy-promtail up -d promtail
-```
-
-## Repositórios envolvidos
+## Repositórios de serviço
 
 | Serviço | Repositório |
 |---|---|
 | Channel BFF | [whatsapp-bff](https://github.com/leandrosflora/whatsapp-bff) |
 | Conversation Orchestrator | [conversation-orchestrator](https://github.com/leandrosflora/conversation-orchestrator) |
-| Agent Runtime | [agent-runtime-renegotiation](https://github.com/leandrosflora/agent-runtime-renegotiation) |
-| Tool Service (MCP) | [tool-service-renegotiation](https://github.com/leandrosflora/tool-service-renegotiation) |
+| Agent Runtime Renegociação | [agent-runtime-renegotiation](https://github.com/leandrosflora/agent-runtime-renegotiation) |
+| Tool Service Renegociação | [tool-service-renegotiation](https://github.com/leandrosflora/tool-service-renegotiation) |
 | Renegotiation Service | [renegotiation-service](https://github.com/leandrosflora/renegotiation-service) |
-| Agent Runtime (fatura de cartão) | [agent-runtime-fatura-cartao](https://github.com/leandrosflora/agent-runtime-fatura-cartao) |
-| Tool Service (fatura de cartão, MCP) | [tool-service-cartao-credito](https://github.com/leandrosflora/tool-service-cartao-credito) |
-| Core Bancário (mock) | [core-bancario-mock](https://github.com/leandrosflora/core-bancario-mock) |
+| Agent Runtime Cartão | [agent-runtime-fatura-cartao](https://github.com/leandrosflora/agent-runtime-fatura-cartao) |
+| Tool Service Cartão | [tool-service-cartao-credito](https://github.com/leandrosflora/tool-service-cartao-credito) |
+| Core Bancário Mock | [core-bancario-mock](https://github.com/leandrosflora/core-bancario-mock) |
 | Knowledge Service | [knowledge-service](https://github.com/leandrosflora/knowledge-service) |
-| Conversation Memory Service | [conversation-memory-service](https://github.com/leandrosflora/conversation-memory-service) |
-| Conversation Audit Service | [conversation-audit-service](https://github.com/leandrosflora/conversation-audit-service) |
-| Conversation Handoff Service | [conversation-handoff-service](https://github.com/leandrosflora/conversation-handoff-service) |
+| Conversation Memory | [conversation-memory-service](https://github.com/leandrosflora/conversation-memory-service) |
+| Conversation Audit | [conversation-audit-service](https://github.com/leandrosflora/conversation-audit-service) |
+| Conversation Handoff | [conversation-handoff-service](https://github.com/leandrosflora/conversation-handoff-service) |
 
-Detalhe de responsabilidades, APIs e regras de negócio de cada um em [`docs/services/`](docs/services/).
+Os 12 repositórios possuem pipeline de build configurado. A cobertura de testes não é uniforme; o `core-bancario-mock` continua build-only até receber projeto de testes.
 
-Os 11 repositórios de serviço públicos/privados com pipeline configurado executam build e testes a cada push/PR. O `core-bancario-mock` possui repositório próprio, mas ainda precisa receber um workflow de CI. Este repositório valida MkDocs, configuração do Compose e executa smoke test real da infraestrutura.
+## CI e evidência
 
-## Kafka em prática
+O CI deste repositório valida:
 
-**9 tópicos** existem hoje no código. `channel.webhook.received` e `channel.webhook.received.retry` possuem produtor e consumidor implementados no `whatsapp-bff`; `channel.webhook.received.dlq` é o fim de linha intencional. Os seis tópicos restantes são publicados como trilha de auditoria/observabilidade e ainda não têm consumidores de aplicação. Matriz completa em [`docs/contracts/kafka-events.md`](docs/contracts/kafka-events.md).
+- Compose e contratos;
+- Alloy, Prometheus e Alertmanager;
+- scripts e documentação canônica;
+- C4 e MkDocs;
+- links;
+- Trivy/SARIF;
+- SBOM;
+- smoke test real de infraestrutura.
 
-## Dados e bancos
+O workflow `Multi-repository E2E` faz checkout dos 12 serviços, registra commits, executa builds/testes, sobe o stack, injeta um webhook assinado e publica evidências. Requer o secret `MULTIREPO_READ_TOKEN`.
 
-Kafka, PostgreSQL, MongoDB, Redis e OpenSearch são efetivamente usados por código de aplicação hoje: PostgreSQL pelo `conversation-audit-service`, `conversation-handoff-service`, `conversation-orchestrator` e `renegotiation-service`; MongoDB pelo `conversation-memory-service`; Redis pelo `conversation-memory-service` e `whatsapp-bff`; OpenSearch pelo `knowledge-service`. Detalhe em [`docs/contracts/data-stores.md`](docs/contracts/data-stores.md).
+## Kafka
 
-## Contratos
-
-- [Mapa de serviços](docs/contracts/services-map.md) — todos os serviços implementados e as dependências assumidas.
-- [Eventos Kafka](docs/contracts/kafka-events.md) — matriz produtor/consumidor/status.
-- [Datastores](docs/contracts/data-stores.md) — o que é provisionado e o que é usado.
+Existem 9 tópicos. `channel.webhook.received` e `.retry` possuem consumers; `.dlq` é terminal. Os demais formam trilha de auditoria/observabilidade conforme a [matriz de eventos](docs/contracts/kafka-events.md).
 
 ## Segurança
 
-Validação HMAC do webhook, exclusão de dados sensíveis dos eventos de auditoria, JWT interno HS256 com segredo distinto por par emissor/audiência e tokens `governed_tool` com autorização por estágio de jornada entre `agent-runtime-renegotiation` → `tool-service-renegotiation` → `renegotiation-service`. Lacunas conhecidas: sem criptografia em repouso, e o HS256 por par ainda é simétrico sem rotação automatizada. Consulte [`docs/security/security-architecture.md`](docs/security/security-architecture.md) e as evidências em `docs/validation/`.
+Implementado:
 
-## ADRs
+- HMAC no webhook;
+- JWT interno HS256 com segredo por par emissor/audiência;
+- tenant assinado;
+- policy determinística para tools de renegociação;
+- Inbox/Outbox e idempotência;
+- Trivy, SARIF e SBOM.
 
-Decisões já implementadas, registradas em [`docs/adr/`](docs/adr/): Kafka como fila durável de webhook, arquitetura hexagonal nos serviços .NET, MCP para tool-calling governado, resiliência `catch-log-continue` e Inbox/Outbox transacional.
+Bloqueadores de produção:
+
+- autenticação/idempotência no Core mock;
+- workload identity/JWKS ou mTLS;
+- receivers reais e processo de incidentes;
+- assinatura/atestado de imagens em todos os serviços;
+- retenção/LGPD e DR corporativos.
+
+Consulte o [roadmap de produção](docs/roadmap/production-readiness.md).
