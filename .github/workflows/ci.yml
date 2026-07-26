@@ -52,13 +52,37 @@ jobs:
             grafana/alloy:v1.16.1 \
             validate /etc/alloy/config.alloy
 
+      - name: Validate Prometheus configuration and rules
+        run: |
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/config/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v2.53.1 \
+            check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/config/prometheus/rules:/etc/prometheus/rules:ro" \
+            prom/prometheus:v2.53.1 \
+            check rules /etc/prometheus/rules/platform-alerts.yml
+
+      - name: Validate Alertmanager configuration
+        run: |
+          docker run --rm --entrypoint /bin/amtool \
+            -v "$PWD/config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" \
+            prom/alertmanager:v0.32.1 \
+            check-config /etc/alertmanager/alertmanager.yml
+
       - name: Validate automation scripts
         run: |
           bash -n scripts/ci-smoke.sh
           bash -n scripts/render-c4.sh
           bash -n scripts/verify-c4-generated.sh
           bash -n scripts/write-ci-env.sh
+          bash -n scripts/e2e-multirepo.sh
+          bash -n scripts/backup-local.sh
+          bash -n scripts/restore-local.sh
+          bash -n scripts/chaos-drill.sh
           python -m py_compile scripts/validate-contract-drift.py
+          python -m py_compile scripts/validate-doc-freshness.py
+          python scripts/validate-doc-freshness.py
 
       - name: Verify generated C4 diagrams
         run: scripts/verify-c4-generated.sh
@@ -156,6 +180,15 @@ jobs:
           path: .
           format: spdx-json
           output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: architecture-sbom
+          if-no-files-found: error
+          retention-days: 30
+          path: sbom.spdx.json
 
   infrastructure-smoke:
     needs: static-validation

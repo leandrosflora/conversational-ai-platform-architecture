@@ -1,6 +1,6 @@
 # Mapa de serviços
 
-**Fonte de verdade:** varredura do código-fonte de cada repositório, feita em 2026-07-06, revisada contra uma execução real da jornada E2E em 2026-07-13, complementada em 2026-07-17 com conhecimento e memória, em 2026-07-18 com auditoria e handoff e em 2026-07-26 com a skill de fatura/limite de cartão. A última resincronização completa ocorreu em 2026-07-26. Este documento, junto com [`kafka-events.md`](kafka-events.md) e [`data-stores.md`](data-stores.md), é a referência canônica de portas, tópicos e serviços.
+**Fonte de verdade:** varredura do código-fonte de cada repositório, feita em 2026-07-06, revisada contra execuções E2E e resincronizada em 2026-07-26. Este documento, junto com [`kafka-events.md`](kafka-events.md) e [`data-stores.md`](data-stores.md), é a referência canônica de portas, tópicos e serviços.
 
 ## Serviços implementados
 
@@ -18,6 +18,7 @@
 | conversation-memory-service | [leandrosflora/conversation-memory-service](https://github.com/leandrosflora/conversation-memory-service) | Memória conversacional | Sessões, histórico e memória de usuário | Redis e MongoDB | Python/FastAPI; porta `8600`; escrito pelo Orchestrator via Outbox |
 | conversation-audit-service | [leandrosflora/conversation-audit-service](https://github.com/leandrosflora/conversation-audit-service) | Audit Service | `POST /journey-events` | PostgreSQL (`ops.audit_events`) | .NET 8; porta `8300`; dedup por tenant e chave de idempotência |
 | conversation-handoff-service | [leandrosflora/conversation-handoff-service](https://github.com/leandrosflora/conversation-handoff-service) | Handoff Service | `POST /handoffs` | PostgreSQL (`conversation.handoffs`) | .NET 8; porta `8200`; dedup por tenant e chave de idempotência |
+| alertmanager | Neste repositório | Infraestrutura de alertas | Prometheus Alertmanager API/UI (`:9093`) | receiver local nulo; futuras integrações de incidentes | Provisionado no Compose; agrupa, inibe e roteia alertas. O receiver `local-null` é intencional no ambiente local. |
 
 ## Sistemas somente da arquitetura-alvo
 

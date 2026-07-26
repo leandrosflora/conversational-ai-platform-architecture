@@ -1,0 +1,77 @@
+name: Operational drills
+
+on:
+  workflow_dispatch:
+    inputs:
+      drill:
+        description: Drill to execute
+        type: choice
+        required: true
+        options:
+          - backup
+          - backup-restore
+          - load
+      backup_id:
+        description: Optional backup identifier
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write placeholder environment
+        run: scripts/write-ci-env.sh
+
+      - name: Start infrastructure
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.override.yml up -d \
+            redis mongodb postgres opensearch kafka kafka-init jaeger loki alloy alertmanager prometheus grafana
+
+      - name: Backup local datastores
+        if: inputs.drill == 'backup' || inputs.drill == 'backup-restore'
+        run: scripts/backup-local.sh "${{ inputs.backup_id || github.run_id }}"
+
+      - name: Restore local datastores
+        if: inputs.drill == 'backup-restore'
+        env:
+          ALLOW_DESTRUCTIVE_RESTORE: "true"
+        run: scripts/restore-local.sh "backups/${{ inputs.backup_id || github.run_id }}"
+
+      - name: Load-test Prometheus readiness
+        if: inputs.drill == 'load'
+        run: |
+          for i in {1..60}; do
+            curl -fsS http://localhost:9090/-/ready && break
+            sleep 2
+          done
+          docker run --rm --network host \
+            -e BASE_URL=http://localhost:9090 \
+            -e TARGET_PATH=/-/ready \
+            -v "$PWD/tests/load:/tests:ro" \
+            grafana/k6:2.0.0 run /tests/readiness.js
+
+      - name: Upload drill evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: operational-drill-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: backups
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.override.yml ps
+          docker compose -f docker-compose.yml -f docker-compose.override.yml logs --no-color --tail=300
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.override.yml down -v --remove-orphans

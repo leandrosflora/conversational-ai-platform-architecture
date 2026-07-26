@@ -4,17 +4,15 @@ Repo: [`leandrosflora/core-bancario-mock`](https://github.com/leandrosflora/core
 
 ## Responsabilidade principal
 
-Mock, num único processo (`builder.WebHost.UseUrls(...)` escutando em 5 portas simultaneamente), das APIs bancárias externas que as duas skills do workspace assumem existir: 4 APIs de renegociação consumidas via `renegotiation-service` (consulta de cliente/contratos/dívidas, elegibilidade, contratação/simulação e formalização) e uma 5ª API de cartão de crédito (limite e fatura) consumida diretamente por `tool-service-cartao-credito`. Sem persistência — dados de qualquer CPF fora das tabelas de cenários abaixo são gerados inline a cada chamada.
+Mock, num único processo, das APIs bancárias externas usadas pelas jornadas de renegociação e cartão. As quatro APIs de renegociação são consumidas via `renegotiation-service`; a Card API é consumida diretamente por `tool-service-cartao-credito`.
 
-## Dados que o serviço possui
+O repositório possui workflow de CI com restore e build. Ainda não possui projeto de testes automatizados, health endpoints dedicados, persistência de idempotência nem middleware de autenticação na ponta receptora.
 
-Nenhuma persistência real, mas dois conjuntos fixos de CPFs reservados:
-- **Renegociação** (`ScenarioFixtures.ByCpf`): 10 CPFs de dígito repetido 11x (`00000000000` a `99999999999`, mais um CPF de teste manual `12345678911`) resolvem para dados determinísticos de cliente/contratos/dívidas/elegibilidade/simulação/formalização, cobrindo os cenários de negócio da renegociação (inelegibilidade, múltiplos contratos, sem dívida em aberto, simulação que expira, documento pendente etc.) — ver `openspec/changes/validate-renegotiation-flow-scenarios/design.md` e `conversational-ai-demo-arch/docs/homologacao/massa-de-teste-clientes.md`.
-- **Cartão de crédito** (`CardFixtures.ByCpf`): 4 CPFs reservados cobrem os cenários da skill de fatura/limite — `11111111111` (fluxo feliz), `22222222222` (limite quase esgotado, fatura fechada), `66666666666` (cliente sem cartão, `HasCard:false`), `77777777777` (fatura zerada). Qualquer outro CPF válido recebe um fallback genérico determinístico (não aleatório) derivado do próprio CPF.
+## Dados
 
-Qualquer CPF fora dessas listas continua com dado gerado inline a cada chamada (`ContractSummary`, `DebtItem` com valores fixos; IDs de simulação/acordo via `Guid.NewGuid()`).
+Não há persistência. CPFs reservados fornecem cenários determinísticos e CPFs válidos não reservados recebem fallback determinístico. IDs de simulação e acordo ainda são gerados por chamada.
 
-## APIs publicadas
+## APIs
 
 | Porta | API | Endpoints |
 |---|---|---|
@@ -22,40 +20,37 @@ Qualquer CPF fora dessas listas continua com dado gerado inline a cada chamada (
 | `9402` | EligibilityApi | `GET /contracts/{contractId}/eligibility` |
 | `9403` | ContractingApi | `POST /contracts/{contractId}/simulations` |
 | `9404` | FormalizationApi | `POST /simulations/{simulationId}/confirmations` · `GET /agreements/{agreementId}/document` |
-| `9405` | CardApi | `GET /clients/{cpf}/card/limit` · `GET /clients/{cpf}/card/invoice` — recebe tenant/JWT de `tool-service-cartao-credito`, mas como as 4 APIs acima, não os valida; consumida diretamente por `tool-service-cartao-credito`, não pelo `renegotiation-service` |
+| `9405` | CardApi | `GET /clients/{cpf}/card/limit` · `GET /clients/{cpf}/card/invoice` |
 
-## Eventos publicados / consumidos
+## Autenticação e idempotência
 
-Nenhum — sem Kafka.
+Estado atual:
 
-## Dependências síncronas
+- a Card API recebe `Authorization` e `X-Tenant-Id`, mas não valida;
+- as APIs de renegociação recebem os headers encaminhados pelo `renegotiation-service`, mas o mock não os aplica como controle;
+- o mock não persiste `Idempotency-Key`;
+- simulação e confirmação podem gerar novos IDs em repetição.
 
-Nenhuma — é o "fim da linha" da cadeia de chamadas.
+Próximo passo obrigatório:
 
-## Persistência & infraestrutura
+1. validar assinatura, `iss`, `sub`, `aud`, `kid`, expiração e tenant;
+2. restringir callers por API;
+3. persistir chave, hash canônico e resposta;
+4. retornar replay idempotente ou conflito;
+5. adicionar testes de autorização e concorrência.
 
-Nenhuma. Roda tanto via `dotnet run` local quanto em container (tem `Dockerfile`, usado como `build: context: ../core-bancario-mock` no `docker-compose.yml` deste repo).
+## Convenção HTTP
 
-## Regras de negócio (gatilhos de teste, verificados no código)
+- identificador malformado ou cliente não encontrado: `404`;
+- resultado de negócio negativo: `200` com campo de resultado e motivo;
+- indisponibilidade técnica futura: `5xx`;
+- autenticação ausente/inválida após o hardening: `401`/`403`.
 
-Genéricos, aplicados a qualquer CPF fora da tabela de cenários reservados (ver "Dados que o serviço possui" acima):
+## Infraestrutura
 
-| Cenário | Gatilho exato | Resposta |
-|---|---|---|
-| Cliente não encontrado | `cpf == "00000000000"` | **`404 Not Found`** |
-| Contrato não elegível | `contractId` contém `"inelegivel"` (case-insensitive) | `200 OK`, `{eligible:false, reason:"cliente_inadimplente_critico"}` |
-| Simulação não possível | `installments <= 0` ou `> 48` | `200 OK`, `{possible:false, reason:"installments_out_of_range"}` |
-| Confirmação não possível | `simulationId` contém `"expired"` | `200 OK`, `{confirmed:false, reason:"simulation_expired"}` |
-| Documento não disponível | `agreementId` contém `"pendente"` | `200 OK`, `{available:false, reason:"document_not_ready"}` |
+O serviço roda via `dotnet run` ou container. O CI atual é build-only até a criação de um projeto de testes. No Compose, a verificação E2E usa temporariamente `GET /clients/11111111111` como sinal de disponibilidade; `/health/live` e `/health/ready` devem substituí-lo.
 
-Para os 10 CPFs reservados, elegibilidade/simulação-expira/documento-pendente vêm de dados fixos por
-CPF em vez desses gatilhos textuais (embora `simulationId`/`agreementId` ainda carreguem os mesmos
-marcadores `-expired`/`-pendente` internamente, propagados a partir do CPF do contrato de origem).
+## Referências
 
-**Convenção de status HTTP:** "não encontrado" (o identificador não resolve a nada real, ex. `GET /clients/{cpf}` com CPF não cadastrado) sempre retorna `404 Not Found`; "negócio negativo" (o identificador resolve a algo real que foi avaliado e reprovado — os 4 cenários de inelegibilidade/simulação/confirmação/documento acima) sempre retorna `200 OK` com um campo de resultado indicando o motivo.
-
-**Gap conhecido:** os endpoints de contratos e dívidas (`/clients/{clientId}/contracts`, `/contracts/{contractId}/debts`) não implementam nenhum gatilho de "não encontrado" próprio, embora o `renegotiation-service` os trate como se pudessem retornar 404.
-
-## Referências de arquitetura
-
-- [Matriz de datastores](../contracts/data-stores.md)
+- [Arquitetura de segurança](../security/security-architecture.md)
+- [Roadmap de produção](../roadmap/production-readiness.md)
