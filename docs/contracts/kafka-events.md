@@ -1,6 +1,6 @@
 # Eventos Kafka
 
-**Fonte de verdade:** varredura do código-fonte em 2026-07-06, atualizada em 2026-07-26 com os produtores da skill de fatura/limite de cartão de crédito (ver [`services-map.md`](services-map.md)).
+**Fonte de verdade:** varredura do código-fonte em 2026-07-06, atualizada em 2026-07-26 com os produtores da skill de fatura/limite de cartão de crédito e, na mesma data, revarrida por completo contra o código atual de cada repositório — descobrindo dois tópicos de retry/DLQ do `whatsapp-bff` que nenhuma versão anterior deste documento listava (ver [`services-map.md`](services-map.md)).
 
 ## Regra de leitura deste documento
 
@@ -10,7 +10,9 @@
 
 | Tópico | Producer | Consumer | Status |
 |---|---|---|---|
-| `channel.webhook.received` | whatsapp-bff (`WhatsAppWebhookEndpoints`, síncrono, antes do ack) | whatsapp-bff (`KafkaWebhookConsumerService`, grupo `whatsapp-bff-webhook-consumer`) | Implementado — produtor e consumidor no mesmo serviço |
+| `channel.webhook.received` | whatsapp-bff (`WhatsAppWebhookEndpoints`, síncrono, antes do ack) | whatsapp-bff (`KafkaWebhookConsumerService`, mesmo consumer group) | Implementado — produtor e consumidor no mesmo serviço |
+| `channel.webhook.received.retry` | whatsapp-bff (`KafkaWebhookConsumerService`, quando o processamento de uma entrega falha e ainda não esgotou `MaxDeliveryAttempts`) | whatsapp-bff (mesmo consumer, também inscrito nesse tópico) | Implementado — produtor e consumidor no mesmo serviço |
+| `channel.webhook.received.dlq` | whatsapp-bff (entrega poison ou tentativas de retry esgotadas) | Nenhum | Produzido sem consumidor — fim de linha por desenho |
 | `channel.message.received` | whatsapp-bff (após forward ao Orchestrator ter sucesso) | Nenhum | Produzido sem consumidor |
 | `channel.message.status` | whatsapp-bff | Nenhum | Produzido sem consumidor |
 | `intent.detected` | conversation-orchestrator | Nenhum | Produzido sem consumidor |
@@ -20,11 +22,11 @@
 
 ## Tópicos configurados em consumer, mas sem producer implementado
 
-Nenhum encontrado — todos os consumers existentes (`KafkaWebhookConsumerService`) têm um producer correspondente no mesmo tópico.
+Nenhum encontrado — todos os consumers existentes (`KafkaWebhookConsumerService`, inscrito em `channel.webhook.received` e `channel.webhook.received.retry`) têm um producer correspondente no mesmo tópico.
 
 ## Observação sobre o padrão geral
 
-Com exceção de `channel.webhook.received` (que existe especificamente para dar durabilidade ao webhook antes do ack — ver [ADR 0001](../adr/0001-kafka-durable-webhook-queue.md)), **nenhum tópico publicado neste workspace tem um consumidor real**. Todos os outros 5 tópicos servem hoje como trilha de auditoria/observabilidade potencial (kafka-console-consumer, ferramentas externas), não como mecanismo de integração entre os serviços implementados — a integração real acontece via chamadas HTTP síncronas (ver [`services-map.md`](services-map.md) e as páginas em [`docs/services/`](../services/)).
+Com exceção de `channel.webhook.received` e `channel.webhook.received.retry` (a fila durável de entrada e seu tópico de retry, consumidos pelo mesmo `KafkaWebhookConsumerService` — ver [ADR 0001](../adr/0001-kafka-durable-webhook-queue.md)), **nenhum tópico publicado neste workspace tem um consumidor real**. `channel.webhook.received.dlq` é produzido mas nunca consumido — é o fim de linha por desenho, não um gap. Os outros 6 tópicos (`channel.message.received`, `channel.message.status`, `intent.detected`, `conversation.state_changed`, `agent.events`, `tool.executed`) servem hoje como trilha de auditoria/observabilidade potencial (kafka-console-consumer, ferramentas externas), não como mecanismo de integração entre os serviços implementados — a integração real acontece via chamadas HTTP síncronas (ver [`services-map.md`](services-map.md) e as páginas em [`docs/services/`](../services/)).
 
 ## Publish engolido vs. propagado
 
@@ -33,6 +35,8 @@ Por padrão, falha ao publicar em Kafka é sempre "catch-log-continue" (nunca de
 | Tópico | Falha de publish é engolida? |
 |---|---|
 | `channel.webhook.received` | **Não** — propaga como `503` |
+| `channel.webhook.received.retry` | **Não** — nem engolida nem propagada como erro HTTP: se o publish falhar, o consumer não comita o offset original e faz `Seek` de volta, tentando de novo depois |
+| `channel.webhook.received.dlq` | Mesmo comportamento de replay-on-failure do retry acima |
 | `channel.message.received` | Sim |
 | `channel.message.status` | Sim |
 | `intent.detected` | Sim |
@@ -45,6 +49,8 @@ Por padrão, falha ao publicar em Kafka é sempre "catch-log-continue" (nunca de
 | Tópico | Producer | Consumer principal | Classificação |
 |---|---|---|---|
 | `channel.webhook.received` | whatsapp-bff | whatsapp-bff (interno) | Fila durável |
+| `channel.webhook.received.retry` | whatsapp-bff | whatsapp-bff (interno) | Fila durável (retry) |
+| `channel.webhook.received.dlq` | whatsapp-bff | — | Dead-letter |
 | `channel.message.received` | whatsapp-bff | — | Auditoria/observabilidade |
 | `channel.message.status` | whatsapp-bff | — | Auditoria/observabilidade |
 | `intent.detected` | conversation-orchestrator | — | Auditoria/observabilidade |
