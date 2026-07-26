@@ -18,6 +18,7 @@ INFRA_SERVICES = {
     "redis",
     "kafka",
     "kafka-init",
+    "kafka-ui",
     "opensearch",
     "jaeger",
     "loki",
@@ -70,18 +71,19 @@ def parse_compose_topics(compose: dict[str, Any]) -> set[str]:
 
 
 def published_ports(service: dict[str, Any]) -> set[str]:
+    """Return only host-published ports, not internal container targets."""
     result: set[str] = set()
     for item in service.get("ports", []) or []:
         if isinstance(item, dict):
-            for key in ("published", "target"):
-                if item.get(key) is not None:
-                    result.add(str(item[key]))
+            published = item.get("published")
+            if published is not None:
+                result.add(str(published))
         elif isinstance(item, str):
-            parts = item.split(":")
-            for part in parts[-2:]:
-                value = part.split("/")[0]
-                if value.isdigit():
-                    result.add(value)
+            mapping = item.split("/")[0]
+            parts = mapping.rsplit(":", 2)
+            host_port = parts[-2] if len(parts) >= 2 else parts[-1]
+            if host_port.isdigit():
+                result.add(host_port)
     return result
 
 
@@ -132,7 +134,7 @@ def main() -> None:
         ports = published_ports(services[service_name])
         undocumented = sorted(port for port in ports if port not in page_text)
         if undocumented:
-            errors.append(f"portas de {service_name} não encontradas na página do serviço: {undocumented}")
+            errors.append(f"portas publicadas de {service_name} não encontradas na página do serviço: {undocumented}")
 
     stale_markers = {
         "README.md": ["7 tópicos existem hoje"],
