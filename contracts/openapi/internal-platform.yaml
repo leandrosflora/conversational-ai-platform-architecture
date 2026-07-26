@@ -1,0 +1,170 @@
+openapi: 3.1.0
+info:
+  title: Conversational AI Internal Platform Contract
+  version: 1.0.0
+  description: Contract used by CI and the multi-repository E2E. x-service identifies the provider repository.
+servers:
+  - url: http://localhost
+components:
+  parameters:
+    Authorization:
+      name: Authorization
+      in: header
+      required: true
+      schema: { type: string, pattern: '^Bearer .+' }
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 256 }
+  schemas:
+    ProcessRequest:
+      type: object
+      required: [TenantId, ConversationId, MessageId, MessageType, JourneyVersion]
+      properties:
+        TenantId: { type: string, format: uuid }
+        ConversationId: { type: string, minLength: 1 }
+        MessageId: { type: string, minLength: 1 }
+        MessageType: { type: string, minLength: 1 }
+        Text: { type: [string, 'null'] }
+        State: { type: [string, 'null'] }
+        JourneyVersion: { type: integer, minimum: 0 }
+        LastIntent: { type: [string, 'null'] }
+        StructuredState: { type: [object, 'null'], additionalProperties: true }
+        SessionReset: { type: boolean, default: false }
+    ProcessResponse:
+      type: object
+      required: [Confidence, RequiresHandoff]
+      properties:
+        Intent: { type: [string, 'null'] }
+        Confidence: { type: number, minimum: 0, maximum: 1 }
+        ReplyText: { type: [string, 'null'] }
+        RequiresHandoff: { type: boolean }
+        HandoffReason: { type: [string, 'null'] }
+        State: { type: [string, 'null'] }
+        StructuredState: { type: [object, 'null'], additionalProperties: true }
+    Error:
+      type: object
+      additionalProperties: true
+paths:
+  /messages:
+    post:
+      operationId: conversationOrchestratorReceiveMessage
+      x-service: conversation-orchestrator
+      x-caller: whatsapp-bff
+      x-internal-auth: true
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '202': { description: Inbox and mandatory effects accepted }
+        '400': { description: Invalid tenant or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Missing or invalid service token }
+        '403': { description: Caller or tenant not authorized }
+  /process:
+    post:
+      operationId: agentRuntimeProcess
+      x-service: agent-runtime-renegotiation|agent-runtime-fatura-cartao
+      x-caller: conversation-orchestrator
+      x-internal-auth: true
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProcessRequest' }
+      responses:
+        '200':
+          description: Structured agent decision
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProcessResponse' }
+        '400': { description: Tenant mismatch }
+        '401': { description: Invalid service token }
+        '422': { description: Invalid request schema }
+  /clients/{cpf}:
+    get:
+      operationId: coreGetClient
+      x-service: core-bancario-mock
+      x-caller: renegotiation-service
+      x-internal-auth: true
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/TenantId'
+        - { name: cpf, in: path, required: true, schema: { type: string, pattern: '^\d{11}$' } }
+      responses:
+        '200': { description: Client found }
+        '404': { description: Client not found }
+  /contracts/{contractId}/simulations:
+    post:
+      operationId: coreCreateSimulation
+      x-service: core-bancario-mock
+      x-caller: renegotiation-service
+      x-internal-auth: true
+      x-idempotent: true
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - { name: contractId, in: path, required: true, schema: { type: string, minLength: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [installments, discount_percentage]
+              properties:
+                installments: { type: integer, minimum: 1, maximum: 48 }
+                discount_percentage: { type: number, minimum: 0, maximum: 100 }
+      responses:
+        '200': { description: Simulation response or idempotent replay }
+        '400': { description: Missing idempotency key }
+        '409': { description: Idempotency conflict or concurrent execution }
+  /simulations/{simulationId}/confirmations:
+    post:
+      operationId: coreConfirmSimulation
+      x-service: core-bancario-mock
+      x-caller: renegotiation-service
+      x-internal-auth: true
+      x-idempotent: true
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - { name: simulationId, in: path, required: true, schema: { type: string, minLength: 1 } }
+      responses:
+        '200': { description: Confirmation response or idempotent replay }
+        '400': { description: Missing idempotency key }
+        '409': { description: Idempotency conflict or concurrent execution }
+  /clients/{cpf}/card/limit:
+    get:
+      operationId: coreGetCardLimit
+      x-service: core-bancario-mock
+      x-caller: tool-service-cartao-credito
+      x-internal-auth: true
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/TenantId'
+        - { name: cpf, in: path, required: true, schema: { type: string, pattern: '^\d{11}$' } }
+      responses:
+        '200': { description: Card limit or deterministic not-found result }
+  /clients/{cpf}/card/invoice:
+    get:
+      operationId: coreGetCardInvoice
+      x-service: core-bancario-mock
+      x-caller: tool-service-cartao-credito
+      x-internal-auth: true
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/TenantId'
+        - { name: cpf, in: path, required: true, schema: { type: string, pattern: '^\d{11}$' } }
+      responses:
+        '200': { description: Card invoice or deterministic not-found result }
