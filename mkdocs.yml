@@ -92,13 +92,18 @@ nav:
       - MCP governado: adr/0003-mcp-governed-tool-calling.md
       - Resiliência: adr/0004-catch-log-continue-resilience.md
       - Outbox, tools e ordering: adr/0005-transactional-outbox-governed-tools-and-ordering.md
+  - Operação:
+      - Runbook: runbook.md
+      - SLOs e alertas: operations/slo-alerting.md
+      - Backup e recuperação: operations/disaster-recovery.md
+      - Retenção e LGPD: governance/data-retention-lgpd.md
+      - Carga e caos: testing/load-and-chaos.md
+      - Atualização de dependências: roadmap/platform-dependency-upgrades.md
+      - Roadmap de produção: roadmap/production-readiness.md
   - Evidências:
       - Jornada E2E: validation/2026-07-13-e2e-journey.md
       - Hardening P1: validation/2026-07-18-p1-hardening-e2e.md
       - Consistência P0: validation/2026-07-19-p0-consistency-e2e.md
       - Segredos por serviço: validation/2026-07-20-per-service-internal-auth-secrets-e2e.md
-  - Operação:
-      - Runbook local: runbook.md
-      - Atualização de dependências: roadmap/platform-dependency-upgrades.md
 
 copyright: Copyright &copy; 2026 Leandro Flora — Apache-2.0
