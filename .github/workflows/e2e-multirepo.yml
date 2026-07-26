@@ -88,9 +88,9 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Execute builds, contracts, evals and signed-webhook E2E
+      - name: Execute locked builds, contracts, evals and signed-webhook E2E
         working-directory: conversational-ai-platform-architecture
-        run: scripts/e2e-multirepo.sh
+        run: scripts/e2e-orchestrated.sh
 
       - name: Upload E2E evidence and locked release manifest
         if: always()
