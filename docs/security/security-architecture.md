@@ -1,240 +1,207 @@
-# Arquitetura de segurança — estado implementado P0/P1
+# Arquitetura de segurança — estado implementado
 
-Este documento descreve controles existentes no código. A arquitetura-alvo permanece em `docs/architecture/C4/c4-container-target.puml`.
+Este documento descreve os controles do change set coordenado entre o repositório de arquitetura e os serviços. A arquitetura-alvo permanece em `docs/architecture/C4/c4-container-target.puml`.
 
 ## 1. Fronteiras de confiança
 
 | Fronteira | Controle implementado |
 |---|---|
-| WhatsApp → BFF | verify token no handshake e HMAC-SHA256 sobre o corpo original |
-| Serviço → serviço | JWT HS256 curto com `iss`, `sub`, `aud`, `iat`, `exp`, `jti` e `tenant_id` |
-| Tenant → serviço | UUID canônico presente simultaneamente em claim assinada e `X-Tenant-Id` |
-| Agent Runtime → Tool Service | JWT `tool_execution` com conversa, mensagem, estágio, versão e evidência de confirmação (skill cartão de crédito: sem `journey_stage`/estágio, já que a policy ali é só por identidade do chamador) |
-| Tool Service (renegociação) → Renegotiation Service | JWT `governed_tool` com tool autorizada e `policy_id` ligado à `Idempotency-Key` |
-| Tool Service (cartão de crédito) → Core Bancário Mock (Card API) | JWT enviado (`X-Tenant-Id` + `Authorization: Bearer`), mas **não validado** — `core-bancario-mock` não tem middleware de auth para nenhuma de suas 5 APIs; único hop síncrono da plataforma sem verificação na ponta receptora |
-| Entrada → negócio | Kafka confirmado antes do ACK; Inbox e estado transacionais |
+| WhatsApp → BFF | verify token e HMAC-SHA256 sobre os bytes originais |
+| Serviço → serviço | JWT HS256 curto, segredo distinto por par emissor/audiência |
+| Tenant → serviço | UUID canônico na claim `tenant_id` e em `X-Tenant-Id` |
+| Agent Runtime → Tool Service | token `tool_execution` e allowlist do caller |
+| Tool Service de renegociação → domínio | token `governed_tool`, tool/estágio e `policy_id` ligados à operação |
+| Renegotiation Service → Core | JWT de serviço, tenant e `Idempotency-Key`; Core restringe caller e deduplica |
+| Tool Service de cartão → Core | JWT de serviço e tenant; Core restringe caller; operações somente leitura |
+| Entrada → negócio | Kafka confirmado antes do ACK; Inbox/estado transacionais |
 | Side effects | Outbox durável, replay at-least-once e deduplicação no destino |
 | Dados | chaves, queries e índices tenant-scoped |
 
-## 2. Autenticidade do webhook
+## 2. Webhook
 
 `whatsapp-bff` valida:
 
 - `hub.verify_token` no handshake;
 - `X-Hub-Signature-256` no POST;
-- HMAC-SHA256 calculado sobre os bytes originais;
-- rejeição antes de parsing de negócio ou publicação Kafka.
+- HMAC-SHA256 calculado sobre o body original;
+- rejeição antes do parsing de negócio ou publicação Kafka.
 
-O webhook é público por necessidade do provedor. `/internal/messages` é interno e exige JWT, tenant assinado e `Idempotency-Key`.
+O webhook é público por necessidade do provedor. Endpoints internos exigem JWT, tenant assinado e, quando mutáveis, chave idempotente.
 
 ## 3. Identidade interna
 
-### 3.1 Claims comuns
+Claims comuns:
 
 ```text
 iss       = conversational-ai-platform
 sub       = serviço chamador
 aud       = serviço destino
-tenant_id = UUID canônico do tenant
+tenant_id = UUID canônico
 iat/exp   = validade curta
 jti       = identificador do token
+kid       = serviço emissor
 alg       = HS256
 ```
 
-O destino compara `tenant_id` com `X-Tenant-Id`. Ausência, UUID vazio, formato inválido ou divergência são rejeitados.
+Cada receptor:
 
-O body pode repetir tenant para compatibilidade de contrato, mas não é fonte de autoridade.
+1. resolve a chave apenas para callers allowlisted;
+2. valida assinatura, issuer, audience, algoritmo e expiração;
+3. exige `kid == sub`;
+4. compara `tenant_id` com `X-Tenant-Id`;
+5. aplica allowlist específica do endpoint/bounded context.
 
-### 3.2 Tokens de execução de tools
-
-O Agent Runtime emite token `tool_execution` contendo:
-
-- `conversation_id`;
-- `message_id`;
-- `journey_stage`;
-- `journey_version`;
-- `confirmation_message_id`, quando uma confirmação explícita foi reconhecida deterministicamente.
-
-Cada Tool Service aceita apenas o caller correspondente e estabelece o contexto a partir dessas claims: `tool-service-renegotiation` só aceita `agent-runtime-renegotiation`, `tool-service-cartao-credito` só aceita `agent-runtime-fatura-cartao`.
-
-### 3.3 Prova de policy para o domínio
-
-Depois de autorizar a tool, `tool-service-renegotiation` emite um segundo token `governed_tool` com:
-
-- `tool_name`;
-- o mesmo contexto da jornada;
-- `policy_id` igual à chave idempotente da operação.
-
-O Renegotiation Service exige:
-
-- caller `tool-service-renegotiation`;
-- operação assinada correspondente ao endpoint;
-- estágio permitido;
-- `policy_id` igual ao header `Idempotency-Key`;
-- para confirmação, `confirmation_message_id == message_id`.
-
-Assim, prompt ou tool call do LLM não são suficientes para autorizar uma operação financeira.
-
-**A skill de cartão de crédito não tem esse segundo salto de domínio.** `tool-service-cartao-credito` emite um JWT de identidade de serviço e chama `core-bancario-mock` (Card API) diretamente. O mock recebe `Authorization` e `X-Tenant-Id`, mas não valida o token; essa chamada também não leva `Idempotency-Key` nem policy proof. Não há serviço de domínio intermediário para revalidar a decisão porque as duas tools são consultas de leitura sem simulação/confirmação a proteger. A defesa em profundidade de “dois serviços concordam antes de agir” existente na renegociação não se aplica aqui; a barreira efetiva permanece a policy de identidade do chamador (§7), somada à assinatura enviada ao último hop ainda não verificado.
+O body pode repetir tenant para compatibilidade, mas não é fonte de autoridade.
 
 ### Limitação de identidade
 
-Desde a mudança `per-service-internal-auth-secrets`, não existe mais um segredo HS256 único compartilhado por toda a plataforma: cada par (emissor, audiência) — ex. `whatsapp-bff → conversation-orchestrator`, `agent-runtime-renegotiation → tool-service-renegotiation` — tem seu próprio segredo. O token de saída carrega um header `kid` igual ao nome do serviço emissor; quem valida resolve a chave a partir de uma allow-list própria de chamadores esperados (`InboundSecrets`/`internal_auth_inbound_secrets`) e rejeita qualquer `kid` fora dela antes mesmo de tentar verificar a assinatura — a identidade do chamador só é considerada provada depois que a assinatura verifica com a chave daquele par específico, nunca pelo `kid`/`sub` isoladamente. Isso reduz o raio de dano de um serviço comprometido: ele só consegue forjar tokens para os pares dos quais já fazia parte, não para toda a malha.
+HS256 por par reduz o raio de impacto, mas continua simétrico. Produção deve migrar para workload identity/OAuth2, JWT assimétrico com JWKS/rotação e/ou mTLS/service mesh.
 
-Isso ainda é HS256 simétrico, sem rotação automatizada — comprometer um dos dois lados de um par ainda expõe aquele segredo específico. Produção deve migrar para:
+## 4. Tools e policy
 
-- workload identity/OAuth2;
-- JWT assimétrico com JWKS e rotação;
-- mTLS/service mesh;
-- credenciais e políticas distintas por workload.
+### Renegociação
 
-## 4. Multitenancy
+O Agent Runtime emite `tool_execution` com:
 
-O contrato único de tenant é UUID não vazio em formato canônico.
+- conversa e mensagem;
+- estágio e versão da jornada;
+- evidência de confirmação, quando aplicável.
 
-### Memory Service
+O Tool Service autoriza deterministicamente a operação e emite `governed_tool`. O Renegotiation Service revalida:
 
-- Redis: `tenant:{tenantId}:session:{conversationId}`;
-- MongoDB: queries incluem `tenantId`;
-- unicidade de mensagens: `(tenantId, externalMessageId)`;
-- body/header divergentes são rejeitados.
+- caller;
+- tool assinada correspondente ao endpoint;
+- estágio permitido;
+- `policy_id == Idempotency-Key`;
+- evidência de confirmação ligada à mensagem atual.
 
-### Knowledge Service
+Prompt ou tool call do LLM não autorizam uma operação financeira por si só.
 
-- índice físico: `faq_chunks-{uuid-canônico}`;
-- não existe normalização com perda ou colisão de caracteres;
-- diretório de ingestão é tenant-scoped;
-- reindexação exige identidade interna e tenant assinado.
+### Cartão
 
-### PostgreSQL
+A skill de cartão é somente leitura. O Tool Service valida que o caller é `agent-runtime-fatura-cartao`; o Core valida que o caller final é `tool-service-cartao-credito`. Não há policy por estágio nem `Idempotency-Key`, pois os endpoints de limite/fatura não criam efeito financeiro.
 
-- Inbox: `(tenant_id, message_id)`;
-- estado: `(tenant_id, conversation_id)`;
-- Outbox: `(tenant_id, idempotency_key)`;
-- simulação: `(tenant_id, operation, idempotency_key)`;
-- Audit/Handoff: `(tenant_id, idempotency_key)`.
+## 5. Core Bancário Mock
 
-## 5. Integridade e durabilidade
+No ambiente integrado, o Core habilita auth fail-closed e aceita:
 
-### 5.1 Entrada
+- `renegotiation-service` nas APIs de cliente, elegibilidade, contratação e formalização;
+- `tool-service-cartao-credito` apenas na Card API.
 
-- o BFF responde ao provedor somente após confirmação Kafka;
+O Core disponibiliza `/health/live`, `/health/ready` e `/metrics`. A readiness retorna `503` quando auth está habilitada e algum segredo obrigatório está ausente ou inválido.
+
+O Core não recebe o token `governed_tool` original. A autorização de jornada já foi revalidada pelo Renegotiation Service; o último hop usa identidade de serviço, tenant e idempotência.
+
+## 6. Multitenancy
+
+O tenant é UUID não vazio em formato canônico.
+
+- Redis: chaves prefixadas por tenant;
+- MongoDB: queries e unicidade incluem tenant;
+- OpenSearch: índice físico inclui tenant canônico;
+- PostgreSQL: Inbox, estado, Outbox, idempotência, Audit e Handoff incluem tenant;
+- Core: scope idempotente em memória inclui tenant, operação e chave.
+
+## 7. Integridade e durabilidade
+
+### Entrada
+
+- o BFF só confirma o webhook após publicação Kafka;
 - o consumer usa commit manual;
-- retry e DLQ precisam ser confirmados antes do commit do registro original;
-- poison messages não entram em loop infinito.
+- retry/DLQ precisam ser confirmados antes do commit original;
+- poison messages têm limite de tentativas.
 
-### 5.2 Estado e efeitos
+### Estado e efeitos
 
-O Orchestrator conclui o Inbox somente depois de uma transação que:
+O Orchestrator conclui o Inbox na mesma transação que atualiza a versão da conversa e registra os efeitos na Outbox. Falha posterior mantém obrigação retryable.
 
-1. atualiza o estado com versão otimista;
-2. registra todos os efeitos na Outbox;
-3. conclui o Inbox.
+### Idempotência
 
-Falha de canal, memória, auditoria, handoff ou Kafka após essa transação não perde a obrigação: o dispatcher mantém o efeito como `failed` e tenta novamente.
+| Camada | Persistência | Garantia |
+|---|---|---|
+| BFF outbound | Redis | mesma resposta por tenant/chave |
+| Memory | MongoDB | `(tenantId, externalMessageId)` |
+| Audit/Handoff | PostgreSQL | `(tenant_id, idempotency_key)` |
+| Renegotiation Service | PostgreSQL | hash/request/resposta duráveis |
+| Core mock | memória do processo | replay/conflict para simulação e confirmação |
 
-### 5.3 Deduplicação dos efeitos
+O Core rejeita operação mutável sem `Idempotency-Key`, replaya o mesmo request e devolve `409` para payload divergente ou execução concorrente. O store process-local não substitui a persistência durável do Renegotiation Service nem um core real.
 
-- resposta outbound: Redis, por tenant e chave da Outbox;
-- histórico: índice MongoDB tenant-scoped;
-- Audit/Handoff: índice PostgreSQL tenant-scoped;
-- simulação: resposta persistida por chave e hash do request;
-- confirmação: chave ligada à mensagem de confirmação e simulação.
+## 8. Ordenação
 
-## 6. Ordenação da jornada
-
-- somente uma mensagem por conversa mantém lease de processamento;
-- a atualização exige a versão esperada;
-- mensagens anteriores ao último `(receivedAt, messageId)` aplicado são classificadas como atrasadas;
+- uma mensagem por conversa mantém lease ativo;
+- atualização exige versão esperada;
+- mensagens antigas são classificadas como `late_message`;
 - efeitos carregam `journey_version`;
-- uma versão posterior não é entregue enquanto existir efeito anterior não publicado.
-
-Isso evita que retry em outro tópico avance a máquina de estados fora de ordem.
-
-## 7. Policy de tools
-
-`tool-service-renegotiation` usa allowlist por estágio.
-
-Controles críticos:
-
-- `simular_proposta` somente após seleção/elegibilidade do contrato;
-- `confirmar_acordo` somente em `ProposalSelected` ou `ConfirmationPending`;
-- confirmação exige evidência explícita ligada à mensagem atual;
-- apenas o Agent Runtime pode executar as tools governadas;
-- o Renegotiation Service valida a mesma decisão novamente.
-
-A policy é código determinístico, não prompt.
-
-`tool-service-cartao-credito` usa uma policy mais simples, por desenho: só checa a identidade do serviço chamador (`caller_service == agent-runtime-fatura-cartao`), sem allowlist de estágio nem segundo serviço revalidando — suas duas tools são consultas de leitura, sem operação a proteger por estágio de jornada.
-
-## 8. Idempotência da simulação
-
-O Renegotiation Service persiste request hash e resposta.
-
-- chave nova: executa uma vez;
-- chave concluída: retorna a resposta persistida;
-- mesma chave com outro request: conflito;
-- chave `processing` ou `failed`: falha fechada.
-
-O comportamento fail-closed existe porque o Core mock ainda não valida a chave. Não há retry automático de uma execução ambígua; é necessária reconciliação administrativa.
+- versões posteriores aguardam efeitos anteriores.
 
 ## 9. PII e logging
 
 Implementado:
 
-- eventos de tools (`tool.executed`, publicado por `tool-service-renegotiation` e `tool-service-cartao-credito`) não incluem argumentos — nem CPF, nem nenhum outro parâmetro de tool, em nenhuma das duas skills;
-- métricas não usam tenant, conversation ID, CPF ou conteúdo como label;
-- reason de handoff é normalizado para vocabulário fechado;
-- logs operacionais usam identificadores e trace, não o texto completo.
+- eventos `tool.executed` não incluem argumentos;
+- métricas não usam CPF, conteúdo, tenant ou conversation ID como label;
+- reason de handoff é normalizado;
+- logs operacionais priorizam identificadores e trace.
 
 Ainda necessário:
 
 - redaction centralizada;
-- classificação de campos e DLP;
-- política de retenção e descarte;
-- processo LGPD de acesso, correção e exclusão;
+- catálogo/classificação de campos e DLP;
+- retenção e descarte aprovados;
+- fluxo LGPD de acesso, correção, anonimização e exclusão;
 - criptografia em repouso gerenciada.
+
+Consulte [Retenção, classificação e LGPD](../governance/data-retention-lgpd.md).
 
 ## 10. Segredos e infraestrutura
 
-O segredo JWT não é versionado e o Compose falha quando ele não é informado.
+O Compose falha quando um segredo por par não é informado. Valores reais não são versionados.
 
-Ainda faltam:
+Ainda faltam para produção:
 
-- cofre de segredos;
-- rotação e revogação por serviço;
-- secret scanning obrigatório;
+- cofre de segredos e rotação/revogação;
+- workload identity/JWKS/mTLS;
 - Kafka TLS/SASL/ACL;
-- segurança do OpenSearch;
+- segurança e backup gerenciado do OpenSearch;
 - NetworkPolicy/service mesh;
-- WAF e rate limiting;
-- imagens assinadas e SBOM publicado em releases.
+- WAF/rate limiting;
+- imagens assinadas e enforcement por digest/atestado.
 
-## 11. Observabilidade de segurança e consistência
+## 11. Supply chain
 
-Monitorar:
+Este repositório executa Trivy, publica SARIF e gera SBOM SPDX como artifact. O Core possui CI com testes de integração. Os controles ainda precisam ser uniformizados nos demais repositórios, incluindo:
 
-- falhas de autenticação e tenant mismatch;
-- policy denial por tool/estágio;
-- idade e quantidade de efeitos pendentes/failed;
-- leases expirados;
+- scan da imagem construída;
+- SBOM por imagem;
+- assinatura Cosign;
+- GitHub artifact attestations/proveniência;
+- bloqueio de deploy sem assinatura/atestado.
+
+## 12. Observabilidade de segurança
+
+Prometheus carrega regras versionadas e envia para Alertmanager. O baseline cobre:
+
+- target crítico indisponível;
+- DLQ;
+- falha de processamento/Outbox;
 - mensagens atrasadas;
-- simulações ambíguas;
-- crescimento de retry e DLQ;
-- falhas de dedupe nos destinos.
+- falhas de autenticação;
+- negação de policy.
 
-Alertas ainda precisam ser provisionados; o código expõe séries, mas não instala regras operacionais completas.
+O receiver local é nulo. Produção precisa de integração real com incidentes, ownership, escalonamento e teste de entrega.
 
-## 12. Lacunas críticas restantes
+## 13. Lacunas críticas restantes
 
-1. **Core Bancário Mock:** não valida JWT, policy proof ou idempotência em nenhuma das suas 5 APIs. As quatro APIs de renegociação recebem tenant, JWT e `Idempotency-Key`; a Card API recebe tenant e JWT, mas não recebe `Idempotency-Key` nem policy proof. Nenhuma das cinco verifica o token recebido.
-2. **Identidade:** HS256 por par, sem rotação/JWKS.
-3. **Handoff:** não integra plataforma humana real.
+1. **Identidade:** HS256 por par, sem rotação/JWKS/workload identity.
+2. **Core:** idempotência em memória; um core real precisa de persistência e controles próprios.
+3. **Handoff:** sem plataforma humana real.
 4. **Infraestrutura:** Kafka/OpenSearch/rede locais sem controles de produção.
-5. **Supply chain:** o repositório de arquitetura passa a gerar SBOM e executar scan de vulnerabilidades, mas assinatura de artefatos e enforcement equivalente nos repositórios de serviço ainda faltam.
-6. **LGPD:** retenção, anonimização e exclusão ainda incompletas.
-7. **Evidência:** build, migração e E2E multi-repositório continuam necessários antes de produção.
+5. **Supply chain:** assinatura/atestado e enforcement ainda não uniformes nos serviços.
+6. **LGPD:** política e implementação corporativas ainda incompletas.
+7. **DR:** restore local cobre PostgreSQL/MongoDB; Kafka/OpenSearch continuam reconstruíveis/replay.
+8. **Evidência:** workflow E2E existe, mas depende de `MULTIREPO_READ_TOKEN` e execução registrada antes da promoção.
 
-## 13. Classificação
+## 14. Classificação
 
-O estado implementado é uma **POC endurecida com consistência transacional e enforcement determinístico de tools**. Não deve ser classificado como production-ready bancário enquanto as lacunas acima não tiverem implementação, teste e evidência operacional.
+O estado é uma **POC endurecida com consistência transacional, identidade por par, enforcement determinístico de tools, Core autenticado em homologação e controles operacionais executáveis**. Ainda não é production-ready bancário.

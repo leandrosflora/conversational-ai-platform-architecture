@@ -3,11 +3,11 @@
 [![Documentation](https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs&logoColor=white)](https://leandrosflora.github.io/conversational-ai-platform-architecture/)
 [![Publish MkDocs](https://github.com/leandrosflora/conversational-ai-platform-architecture/actions/workflows/docs.yml/badge.svg)](https://github.com/leandrosflora/conversational-ai-platform-architecture/actions/workflows/docs.yml)
 
-Arquitetura de referência executável para plataformas de IA conversacional com agentes, MCP, RAG, WhatsApp, APIs corporativas, consistência transacional e observabilidade.
+Arquitetura de referência executável para IA conversacional com agentes, MCP, RAG, WhatsApp, APIs corporativas, consistência transacional, segurança interna e observabilidade.
 
 **Documentação:** https://leandrosflora.github.io/conversational-ai-platform-architecture/
 
-## Documentação principal
+## Documentação
 
 - [Contexto de negócio](docs/context/business-context.md)
 - [Arquitetura C4](docs/architecture/c4-context.md)
@@ -30,8 +30,6 @@ scripts/write-ci-env.sh
 docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
 ```
 
-Parar:
-
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.override.yml down
 ```
@@ -53,7 +51,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml down
 | Alertmanager | `9093` |
 | Grafana | `3001` |
 
-Grafana é provisionado com Prometheus, Loki e Jaeger. Alloy coleta logs de containers. Prometheus carrega regras versionadas e envia alertas para o Alertmanager local.
+Grafana é provisionado com Prometheus, Loki e Jaeger. Alloy coleta logs. Prometheus carrega regras versionadas e envia alertas para o Alertmanager local.
 
 ## Repositórios de serviço
 
@@ -72,7 +70,7 @@ Grafana é provisionado com Prometheus, Loki e Jaeger. Alloy coleta logs de cont
 | Conversation Audit | [conversation-audit-service](https://github.com/leandrosflora/conversation-audit-service) |
 | Conversation Handoff | [conversation-handoff-service](https://github.com/leandrosflora/conversation-handoff-service) |
 
-Os 12 repositórios possuem pipeline de build configurado. A cobertura de testes não é uniforme; o `core-bancario-mock` continua build-only até receber projeto de testes.
+Os 12 repositórios possuem pipeline de build. O `core-bancario-mock` agora executa testes de integração de health, autenticação e idempotência; a cobertura dos demais serviços continua sendo responsabilidade dos pipelines próprios.
 
 ## CI e evidência
 
@@ -81,13 +79,11 @@ O CI deste repositório valida:
 - Compose e contratos;
 - Alloy, Prometheus e Alertmanager;
 - scripts e documentação canônica;
-- C4 e MkDocs;
-- links;
-- Trivy/SARIF;
-- SBOM;
-- smoke test real de infraestrutura.
+- C4, MkDocs e links;
+- Trivy/SARIF e SBOM;
+- smoke test real da infraestrutura.
 
-O workflow `Multi-repository E2E` faz checkout dos 12 serviços, registra commits, executa builds/testes, sobe o stack, injeta um webhook assinado e publica evidências. Requer o secret `MULTIREPO_READ_TOKEN`.
+O workflow `Multi-repository E2E` faz checkout dos 12 serviços, registra commits, executa builds/testes, sobe o stack, injeta webhook assinado, valida o Core autenticado e publica evidências. Requer `MULTIREPO_READ_TOKEN`.
 
 ## Kafka
 
@@ -98,16 +94,18 @@ Existem 9 tópicos. `channel.webhook.received` e `.retry` possuem consumers; `.d
 Implementado:
 
 - HMAC no webhook;
-- JWT interno HS256 com segredo por par emissor/audiência;
+- JWT interno HS256 com segredo por par;
 - tenant assinado;
-- policy determinística para tools de renegociação;
-- Inbox/Outbox e idempotência;
+- policy determinística de tools de renegociação;
+- Core com caller/tenant validados no Compose integrado;
+- idempotência durável no Renegotiation Service e replay process-local no Core;
+- Inbox/Outbox;
 - Trivy, SARIF e SBOM.
 
 Bloqueadores de produção:
 
-- autenticação/idempotência no Core mock;
-- workload identity/JWKS ou mTLS;
+- workload identity/JWKS ou mTLS e rotação de segredos;
+- persistência real/idempotente no sistema bancário final;
 - receivers reais e processo de incidentes;
 - assinatura/atestado de imagens em todos os serviços;
 - retenção/LGPD e DR corporativos.
