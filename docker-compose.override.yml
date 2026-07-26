@@ -126,6 +126,7 @@ services:
       InternalAuth__Issuer: conversational-ai-platform
       InternalAuth__ServiceName: renegotiation-service
       InternalAuth__InboundSecrets__tool-service-renegotiation: ${INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE:?Set INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE in .env}
+      InternalAuth__OutboundSecrets__core-bancario-mock: ${INTERNAL_AUTH_SECRET_RENEGOTIATION_SERVICE__CORE_BANCARIO_MOCK:?Set INTERNAL_AUTH_SECRET_RENEGOTIATION_SERVICE__CORE_BANCARIO_MOCK in .env}
       InternalAuth__TokenTtlSeconds: "300"
       Postgres__ConnectionString: Host=postgres;Port=5432;Database=conversational_ai;Username=postgres;Password=postgres
       Postgres__IdempotencyLeaseSeconds: "120"
@@ -133,8 +134,6 @@ services:
       postgres:
         condition: service_healthy
 
-  # The Card tool signs a service token for parity with the remaining synchronous hops.
-  # The mock still lacks authentication middleware, so the token is not validated there.
   tool-service-cartao-credito:
     environment:
       INTERNAL_AUTH_ENABLED: "true"
@@ -144,6 +143,14 @@ services:
       INTERNAL_AUTH_OUTBOUND_SECRETS__core-bancario-mock: ${INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK:?Set INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK in .env}
       INTERNAL_AUTH_TOKEN_TTL_SECONDS: "300"
       CORE_BANCARIO_MOCK_AUDIENCE: core-bancario-mock
+
+  core-bancario-mock:
+    environment:
+      InternalAuth__Enabled: "true"
+      InternalAuth__Issuer: conversational-ai-platform
+      InternalAuth__ServiceName: core-bancario-mock
+      InternalAuth__InboundSecrets__renegotiation-service: ${INTERNAL_AUTH_SECRET_RENEGOTIATION_SERVICE__CORE_BANCARIO_MOCK:?Set INTERNAL_AUTH_SECRET_RENEGOTIATION_SERVICE__CORE_BANCARIO_MOCK in .env}
+      InternalAuth__InboundSecrets__tool-service-cartao-credito: ${INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK:?Set INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK in .env}
 
   agent-runtime-fatura-cartao:
     environment:
