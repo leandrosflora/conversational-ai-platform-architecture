@@ -1,0 +1,35 @@
+@startuml
+!include <C4/C4_Context>
+
+title C4 Context — Arquitetura-alvo corporativa
+
+Person(customer, "Cliente", "Recebe campanhas e interage em canais digitais.")
+Person(humanAgent, "Atendente Humano", "Assume conversas transferidas pela IA.")
+Person(collectionsManager, "Gestor de Cobrança", "Acompanha campanhas, conversões e recuperação.")
+
+System_Ext(salesforce, "Salesforce CRM", "Origem da segmentação de clientes elegíveis.")
+System_Ext(datalake, "Data Lake Corporativo", "Histórico, analytics, auditoria e compartilhamento de dados.")
+System_Ext(campaignAutomation, "Produto de Dados / Automação de Campanha", "Ativa clientes por e-mail, SMS e canais externos.")
+System_Ext(channels, "Canais / WhatsApp BSP", "WhatsApp, app, web e voz.")
+System_Ext(core, "Core Bancário", "APIs reais de cliente, contratos, elegibilidade, negociação e cartão.")
+System_Ext(knowledgeBase, "Base de Conhecimento Corporativa", "Conteúdo classificado com ACL por documento.")
+System_Ext(openai, "OpenAI / AI Model Gateway", "Modelos fundacionais governados e roteados.")
+System_Ext(attendance, "Plataforma de Atendimento", "Fila humana e desktop do atendente.")
+
+System(platform, "Plataforma de IA Conversacional", "Orquestra jornadas multicanal com agentes, RAG, MCP, auditoria e governança.")
+
+Rel(salesforce, datalake, "Disponibiliza segmentação", "Batch / Data Pipeline")
+Rel(datalake, campaignAutomation, "Fornece base de campanha", "Data Product")
+Rel(campaignAutomation, customer, "Ativa cliente", "E-mail / SMS / Social")
+Rel(customer, channels, "Interage", "Canal digital")
+Rel(channels, platform, "Eventos e respostas", "HTTPS / Events")
+Rel(platform, core, "Executa capacidades bancárias", "APIs idempotentes")
+Rel(platform, knowledgeBase, "Recupera conteúdo autorizado", "RAG / APIs")
+Rel(platform, openai, "Invoca modelos governados", "HTTPS")
+Rel(platform, attendance, "Transfere conversa e contexto", "HTTPS / Events")
+Rel(platform, datalake, "Exporta auditoria e dados operacionais", "Events / Batch")
+Rel(humanAgent, attendance, "Atende conversas", "Web UI")
+Rel(collectionsManager, datalake, "Consulta indicadores", "Analytics")
+
+SHOW_LEGEND()
+@enduml

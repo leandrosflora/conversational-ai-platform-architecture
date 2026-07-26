@@ -6,20 +6,27 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  compose-config:
+  static-validation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Placeholder values only - satisfies the ${VAR:?...} required-var guards in
-      # docker-compose.override.yml so `docker compose config` can render the merged
-      # file. This never runs `docker compose up`, so no real secrets are needed; it
-      # only parses and interpolates the YAML, which is what would have caught the
-      # kafka-init block-scalar folding bug found by hand during the 2026-07-18 validation.
-      - name: Write placeholder .env
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install documentation dependencies
+        run: pip install -r requirements-docs.txt
+
+      - name: Write placeholder environment
         run: |
-          cat > .env <<'EOF'
+          cat > .env <<'ENVEOF'
           INTERNAL_AUTH_SECRET_WHATSAPP_BFF__CONVERSATION_ORCHESTRATOR=placeholder-secret-for-ci-only-not-a-real-secret
           INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__WHATSAPP_BFF=placeholder-secret-for-ci-only-not-a-real-secret
           INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_RENEGOTIATION=placeholder-secret-for-ci-only-not-a-real-secret
@@ -34,10 +41,75 @@ jobs:
           INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
           DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
           OPENAI_API_KEY=sk-placeholder-not-a-real-key
+          OPENAI_MODEL_ID=gpt-4o-mini-2024-07-18
           MOCK_AGENT_ENABLED=true
           WHATSAPP_APP_SECRET=placeholder
           WHATSAPP_VERIFY_TOKEN=placeholder
-          EOF
+          WHATSAPP_GRAPH_API_VERSION=v20.0
+          ENVEOF
 
-      - name: Validate docker compose configuration
+      - name: Validate Docker Compose configuration
         run: docker compose -f docker-compose.yml -f docker-compose.override.yml config --quiet
+
+      - name: Validate Grafana Alloy configuration
+        run: |
+          docker run --rm \
+            -v "$PWD/config/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            grafana/alloy:v1.16.1 \
+            validate /etc/alloy/config.alloy
+
+      - name: Validate smoke script syntax
+        run: bash -n scripts/ci-smoke.sh
+
+      - name: Build MkDocs strictly
+        run: mkdocs build --strict
+
+  infrastructure-smoke:
+    needs: static-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write placeholder environment
+        run: |
+          cat > .env <<'ENVEOF'
+          INTERNAL_AUTH_SECRET_WHATSAPP_BFF__CONVERSATION_ORCHESTRATOR=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__WHATSAPP_BFF=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_RENEGOTIATION=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_AUDIT_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_MEMORY_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__TOOL_SERVICE_RENEGOTIATION=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__KNOWLEDGE_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__CONVERSATION_MEMORY_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO=placeholder-secret-for-ci-only-not-a-real-secret
+          INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE=placeholder-secret-for-ci-only-not-a-real-secret
+          DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
+          OPENAI_API_KEY=sk-placeholder-not-a-real-key
+          OPENAI_MODEL_ID=gpt-4o-mini-2024-07-18
+          MOCK_AGENT_ENABLED=true
+          WHATSAPP_APP_SECRET=placeholder
+          WHATSAPP_VERIFY_TOKEN=placeholder
+          WHATSAPP_GRAPH_API_VERSION=v20.0
+          ENVEOF
+
+      - name: Run infrastructure smoke test
+        run: scripts/ci-smoke.sh
+
+  compose-config:
+    name: compose-config
+    if: ${{ always() }}
+    needs:
+      - static-validation
+      - infrastructure-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce replacement checks
+        env:
+          STATIC_VALIDATION_RESULT: ${{ needs.static-validation.result }}
+          INFRASTRUCTURE_SMOKE_RESULT: ${{ needs.infrastructure-smoke.result }}
+        run: |
+          test "$STATIC_VALIDATION_RESULT" = "success"
+          test "$INFRASTRUCTURE_SMOKE_RESULT" = "success"

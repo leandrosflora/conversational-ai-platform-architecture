@@ -7,7 +7,25 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
 ## Visão arquitetural
 
-![Contexto da plataforma de IA conversacional](architecture/C4/c4-context.svg)
+<div class="grid cards" markdown>
+
+-   :material-check-circle-outline:{ .lg .middle } **Estado implementado**
+
+    ---
+
+    WhatsApp Cloud API, OpenAI, Core Bancário Mock, 12 serviços, cinco datastores e observabilidade local executável.
+
+    [Abrir C4 de contexto atual](architecture/C4/c4-context.puml)
+
+-   :material-office-building-cog-outline:{ .lg .middle } **Arquitetura-alvo corporativa**
+
+    ---
+
+    Salesforce, Data Lake, automação de campanha, atendimento humano integrado, Model Gateway, PDP e infraestrutura gerenciada.
+
+    [Abrir C4 de contexto alvo](architecture/C4/c4-context-target.puml)
+
+</div>
 
 ## Capacidades centrais
 
@@ -37,11 +55,19 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
     [Knowledge Service](services/knowledge-service.md)
 
+-   :material-chart-timeline-variant:{ .lg .middle } **Observabilidade**
+
+    ---
+
+    Grafana Alloy, Loki, Jaeger, Prometheus e Grafana correlacionam logs, traces e métricas da plataforma.
+
+    [Containers implementados](architecture/C4/c4-container-current.puml)
+
 -   :material-shield-check-outline:{ .lg .middle } **Segurança e auditoria**
 
     ---
 
-    HMAC, JWT interno por par de serviços, idempotência, trilha imutável e handoff humano protegem a operação.
+    HMAC, JWT interno por par de serviços, idempotência, trilha auditável e handoff humano protegem a operação.
 
     [Arquitetura de segurança](security/security-architecture.md)
 
@@ -64,14 +90,14 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
 | Capacidade | Tecnologia ou padrão |
 |---|---|
-| Serviços | .NET, arquitetura hexagonal, APIs REST |
-| Agentes | Runtime de agente e MCP para ferramentas |
+| Serviços | .NET, Python, arquitetura hexagonal e APIs REST |
+| Agentes | Strands, OpenAI e MCP para ferramentas |
 | Mensageria | Kafka, Inbox/Outbox e idempotência |
 | Conhecimento | OpenSearch com busca vetorial |
 | Estado | PostgreSQL, MongoDB e Redis |
 | Segurança | HMAC, JWT interno e autorização de tools |
-| Observabilidade | OpenTelemetry, Prometheus, Grafana, Loki e Jaeger |
+| Observabilidade | OpenTelemetry, Grafana Alloy, Prometheus, Grafana, Loki e Jaeger |
 | Execução local | Docker Compose e Postman |
 
 !!! success "Arquitetura executável"
-    Além dos diagramas e contratos, o projeto registra validações E2E reais da jornada, incluindo consistência, hardening e autenticação interna por serviço.
+    Além dos diagramas e contratos, o projeto registra validações E2E reais e executa smoke test automatizado da infraestrutura no CI.

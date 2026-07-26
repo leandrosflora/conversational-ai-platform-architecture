@@ -10,13 +10,14 @@ Arquitetura de referência para plataformas de IA conversacional utilizando agen
 ## Documentação
 
 - [Contexto de negócio](docs/context/business-context.md) — jornadas, personas e escopo.
-- [C4 nível 1 (contexto)](docs/architecture/c4-context.md) e [diagramas C4](docs/architecture/C4/) (`.puml`/`.svg`/`.png`).
+- [C4 nível 1](docs/architecture/c4-context.md) — separação explícita entre estado implementado e arquitetura-alvo corporativa.
 - [Diagramas de sequência da jornada](docs/architecture/sequence-diagrams.md) — passo a passo técnico, do webhook do WhatsApp até a consulta de débitos/elegibilidade.
 - [Páginas de referência por serviço](docs/services/) — responsabilidade, APIs, eventos e regras de negócio de cada um dos 12 serviços implementados.
 - [Contratos](docs/contracts/) — mapa de serviços, matriz de eventos Kafka, datastores.
 - [ADRs](docs/adr/) — decisões de arquitetura já implementadas no código.
 - [Arquitetura de segurança](docs/security/security-architecture.md).
 - [Runbook do ambiente local](docs/runbook.md) — como subir a infraestrutura e os serviços de aplicação.
+- [Plano de atualização de dependências](docs/roadmap/platform-dependency-upgrades.md) — Kafka, Jaeger e Loki.
 - [Validações E2E](docs/validation/) — execuções reais da jornada completa contra os serviços rodando, comparando comportamento observado com o que os docs afirmam.
 
 ## Ambiente local
@@ -50,18 +51,21 @@ docker compose down -v
 | OpenSearch | `localhost:9200` | - |
 | Jaeger UI | `localhost:16686` | - |
 | Loki | `localhost:3100` | - |
+| Grafana Alloy | `localhost:12345` | - |
 | Prometheus | `localhost:9090` | - |
 | Grafana | `localhost:3001` | `admin/admin` |
 
 ### Observabilidade
 
-O Grafana já sobe provisionado com datasources para:
+O Grafana sobe provisionado com datasources para Prometheus, Loki e Jaeger. O Grafana Alloy descobre os containers pelo Docker socket, preserva os labels `container`, `service` e `stream` e envia os logs ao Loki. O Prometheus coleta métricas dele mesmo, do Jaeger, do Alloy e dos endpoints `/metrics` declarados para os serviços de aplicação.
 
-- Prometheus
-- Loki
-- Jaeger
+Os serviços já propagam `TraceId`/`SpanId`/`CorrelationId` e exportam traces por OTLP quando instrumentados. Nem todos os endpoints de métricas de aplicação estão implementados; portanto, alguns targets podem aparecer como `DOWN` sem comprometer a saúde da infraestrutura local.
 
-O Prometheus coleta métricas dele mesmo, do Jaeger e de uma aplicação exposta no host em `localhost:8080/metrics`. Os serviços de aplicação hoje propagam `TraceId`/`SpanId`/`CorrelationId` nos logs (ver [`docs/services/`](docs/services/)), mas nenhum publica métricas OpenTelemetry próprias ainda — a stack está pronta para quando isso for instrumentado.
+Promtail não é mais iniciado no stack padrão. Ele permanece apenas no perfil de rollback explícito:
+
+```bash
+docker compose --profile legacy-promtail up -d promtail
+```
 
 ## Repositórios envolvidos
 
@@ -82,26 +86,26 @@ O Prometheus coleta métricas dele mesmo, do Jaeger e de uma aplicação exposta
 
 Detalhe de responsabilidades, APIs e regras de negócio de cada um em [`docs/services/`](docs/services/).
 
-Os 12 repos (os desta tabela exceto Core Bancário + este) têm CI (`.github/workflows/ci.yml`) rodando build/teste (ou, neste repo, `docker compose config`) a cada push/PR para o branch padrão. Core Bancário agora tem repositório próprio, mas ainda não tem workflow de CI configurado.
+Os 11 repositórios de serviço públicos/privados com pipeline configurado executam build e testes a cada push/PR. O `core-bancario-mock` possui repositório próprio, mas ainda precisa receber um workflow de CI. Este repositório valida MkDocs, configuração do Compose e executa smoke test real da infraestrutura.
 
 ## Kafka em prática
 
-7 tópicos existem hoje no código; a maioria é publicada como trilha de auditoria, sem consumidor real (a integração entre serviços é majoritariamente HTTP síncrono). O único tópico com produtor e consumidor implementados é `channel.webhook.received`, usado como fila durável de entrada do `whatsapp-bff`. Matriz completa em [`docs/contracts/kafka-events.md`](docs/contracts/kafka-events.md).
+**9 tópicos** existem hoje no código. `channel.webhook.received` e `channel.webhook.received.retry` possuem produtor e consumidor implementados no `whatsapp-bff`; `channel.webhook.received.dlq` é o fim de linha intencional. Os seis tópicos restantes são publicados como trilha de auditoria/observabilidade e ainda não têm consumidores de aplicação. Matriz completa em [`docs/contracts/kafka-events.md`](docs/contracts/kafka-events.md).
 
 ## Dados e bancos
 
-Kafka, PostgreSQL, MongoDB, Redis e OpenSearch são efetivamente usados por código de aplicação hoje: PostgreSQL pelo `conversation-audit-service` (`ops.audit_events`, um evento de jornada por linha), pelo `conversation-handoff-service` (`conversation.handoffs`, um pedido de transferência humana por linha), pelo `conversation-orchestrator` (Inbox + Outbox transacional da ingestão de mensagens) e pelo `renegotiation-service` (lease de idempotência de `simular_proposta`); MongoDB pelo `conversation-memory-service` (histórico de mensagens e memória de longo prazo); Redis pelo `conversation-memory-service` (sessão ativa de conversa) e pelo `whatsapp-bff` (idempotência de envio outbound); OpenSearch pelo `knowledge-service` (busca vetorial k-NN de FAQ, um índice por tenant). Detalhe em [`docs/contracts/data-stores.md`](docs/contracts/data-stores.md) — pode estar desatualizado sobre os usos mais recentes.
+Kafka, PostgreSQL, MongoDB, Redis e OpenSearch são efetivamente usados por código de aplicação hoje: PostgreSQL pelo `conversation-audit-service`, `conversation-handoff-service`, `conversation-orchestrator` e `renegotiation-service`; MongoDB pelo `conversation-memory-service`; Redis pelo `conversation-memory-service` e `whatsapp-bff`; OpenSearch pelo `knowledge-service`. Detalhe em [`docs/contracts/data-stores.md`](docs/contracts/data-stores.md).
 
 ## Contratos
 
 - [Mapa de serviços](docs/contracts/services-map.md) — todos os serviços implementados e as dependências assumidas.
 - [Eventos Kafka](docs/contracts/kafka-events.md) — matriz produtor/consumidor/status.
-- [Datastores](docs/contracts/data-stores.md) — o que é provisionado vs. o que é usado.
+- [Datastores](docs/contracts/data-stores.md) — o que é provisionado e o que é usado.
 
 ## Segurança
 
-Validação HMAC do webhook, exclusão de dados sensíveis dos eventos de auditoria, JWT interno HS256 (com claim `tenant_id` assinada e verificada) exigido em praticamente todo endpoint entre serviços — com um segredo distinto por par (emissor, audiência), não mais um segredo único compartilhado por toda a plataforma (ver `per-service-internal-auth-secrets` em `openspec/changes/`) — e tokens `governed_tool` com autorização por estágio de jornada entre `agent-runtime-renegotiation` → `tool-service-renegotiation` → `renegotiation-service`. Lacunas conhecidas que permanecem: sem criptografia em repouso, e o HS256 por par ainda é simétrico sem rotação automatizada. Detalhe em [`docs/security/security-architecture.md`](docs/security/security-architecture.md) — **atenção**: esse documento pode estar desatualizado sobre o que já foi implementado; ver `docs/validation/` para o estado confirmado por execução real mais recente.
+Validação HMAC do webhook, exclusão de dados sensíveis dos eventos de auditoria, JWT interno HS256 com segredo distinto por par emissor/audiência e tokens `governed_tool` com autorização por estágio de jornada entre `agent-runtime-renegotiation` → `tool-service-renegotiation` → `renegotiation-service`. Lacunas conhecidas: sem criptografia em repouso, e o HS256 por par ainda é simétrico sem rotação automatizada. Consulte [`docs/security/security-architecture.md`](docs/security/security-architecture.md) e as evidências em `docs/validation/`.
 
 ## ADRs
 
-Decisões de arquitetura já implementadas no código, registradas retroativamente em [`docs/adr/`](docs/adr/): Kafka como fila durável de webhook, arquitetura hexagonal nos serviços .NET, MCP para tool-calling governado, e a filosofia de resiliência "catch-log-continue".
+Decisões já implementadas, registradas em [`docs/adr/`](docs/adr/): Kafka como fila durável de webhook, arquitetura hexagonal nos serviços .NET, MCP para tool-calling governado, resiliência `catch-log-continue` e Inbox/Outbox transacional.
