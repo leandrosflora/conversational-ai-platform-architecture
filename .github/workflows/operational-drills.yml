@@ -10,6 +10,7 @@ on:
         options:
           - backup
           - backup-restore
+          - dr-invariants
           - load
       backup_id:
         description: Optional backup identifier
@@ -22,7 +23,7 @@ permissions:
 jobs:
   drill:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
 
@@ -30,8 +31,9 @@ jobs:
         run: scripts/write-ci-env.sh
 
       - name: Start infrastructure
+        if: inputs.drill != 'dr-invariants'
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.override.yml up -d \
+          docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --wait \
             redis mongodb postgres opensearch kafka kafka-init jaeger loki alloy alertmanager prometheus grafana
 
       - name: Backup local datastores
@@ -43,6 +45,13 @@ jobs:
         env:
           ALLOW_DESTRUCTIVE_RESTORE: "true"
         run: scripts/restore-local.sh "backups/${{ inputs.backup_id || github.run_id }}"
+
+      - name: Prove RPO and RTO with persisted sentinels
+        if: inputs.drill == 'dr-invariants'
+        env:
+          ALLOW_DESTRUCTIVE_RESTORE: "true"
+          RUN_ID: ${{ inputs.backup_id || github.run_id }}
+        run: scripts/dr-invariant-drill.sh
 
       - name: Load-test Prometheus readiness
         if: inputs.drill == 'load'
@@ -64,7 +73,9 @@ jobs:
           name: operational-drill-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 30
-          path: backups
+          path: |
+            backups
+            artifacts/dr
 
       - name: Diagnostics
         if: failure()
