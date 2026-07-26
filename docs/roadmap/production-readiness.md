@@ -2,35 +2,48 @@
 
 ## Estado
 
-A solução é uma referência executável e uma POC endurecida. Os controles deste repositório melhoram repetibilidade e evidência, mas produção bancária exige implementação coordenada nos repositórios de serviço e na plataforma de execução.
+A solução é uma referência executável e uma POC endurecida. Este change set entrega baselines de operação, evidência e segurança; produção bancária continua dependendo da plataforma de execução e dos controles corporativos.
 
-## P0 — bloqueadores
+## Baselines concluídos neste change set
 
-- validar JWT, tenant e idempotência no `core-bancario-mock`;
-- executar E2E multi-repositório em agenda e antes de releases;
-- provisionar receivers reais e ownership de alertas;
-- substituir segredos HS256 por workload identity/JWKS ou mTLS;
+- Core mock com JWT/tenant por caller no Compose integrado;
+- health, métricas e testes de integração do Core;
+- replay/conflict idempotente process-local no Core;
+- workflow E2E multi-repositório com commits e artifacts;
+- regras Prometheus e Alertmanager local;
+- scripts protegidos de backup/restore e chaos drill;
+- baseline k6;
+- documentação de SLO, DR, LGPD e supply chain;
+- SBOM do repositório de arquitetura como artifact.
+
+## P0 — bloqueadores restantes
+
+- executar e tornar obrigatório o E2E multi-repositório antes de releases;
+- provisionar receivers reais, ownership e plantão;
+- substituir HS256 por workload identity/JWKS e/ou mTLS;
 - implementar retenção, anonimização e exclusão aprovadas por LGPD/Jurídico;
-- provar restore em ambiente descartável.
+- provar restore periódico em ambiente descartável;
+- substituir idempotência process-local do mock por garantias do sistema bancário real.
 
 ## P1 — supply chain
 
 - gerar SBOM por imagem de serviço;
 - publicar imagens por digest;
-- assinar imagens e gerar atestados de proveniência;
-- bloquear deploy de artefato sem assinatura/atestado;
-- uniformizar Trivy/SAST/SCA em todos os repositórios;
-- registrar versões exatas dos 12 repositórios em cada evidência E2E.
+- assinar imagens com Cosign;
+- gerar atestados de proveniência;
+- bloquear deploy sem assinatura/atestado;
+- uniformizar Trivy/SAST/SCA nos 12 serviços;
+- relacionar cada evidência E2E a imagens/digests exatos.
 
 ## P2 — escala e resiliência
 
-- testes de carga por jornada e tenant;
-- chaos drills automatizados;
-- budgets de custo/tokens;
-- consumer lag e capacidade Kafka;
-- isolamento de workloads e NetworkPolicy;
+- carga por jornada e tenant, não apenas readiness;
+- chaos drills automatizados em ambiente descartável;
+- budgets de custo e tokens;
+- consumer lag e capacity planning Kafka;
+- isolamento por workload e NetworkPolicy;
 - SLOs aprovados e error budgets;
-- recuperação regional e testes de continuidade.
+- recuperação regional e continuidade.
 
 ## Critério de encerramento
 
