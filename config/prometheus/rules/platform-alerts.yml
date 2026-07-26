@@ -1,0 +1,84 @@
+groups:
+  - name: platform-infrastructure
+    rules:
+      - alert: PlatformInfrastructureTargetDown
+        expr: up{job=~"prometheus|jaeger|alloy|alertmanager"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "Target de infraestrutura indisponível"
+          description: "{{ $labels.job }} está indisponível há mais de 2 minutos."
+
+      - alert: PrometheusRuleEvaluationFailures
+        expr: increase(prometheus_rule_evaluation_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: prometheus
+        annotations:
+          summary: "Falha na avaliação de regras do Prometheus"
+          description: "O Prometheus registrou falhas ao avaliar regras nos últimos 5 minutos."
+
+  - name: conversational-ai-consistency
+    rules:
+      - alert: ChannelWebhookDeadLetterTraffic
+        expr: sum(rate(channel_webhook_dead_letter_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: whatsapp-bff
+        annotations:
+          summary: "Mensagens foram enviadas para a DLQ"
+          description: "Há tráfego novo em channel.webhook.received.dlq."
+
+      - alert: OrchestratorProcessingFailures
+        expr: sum(rate(orchestrator_processing_failures_total[5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: conversation-orchestrator
+        annotations:
+          summary: "Falhas de processamento no Orchestrator"
+          description: "O Orchestrator registrou falhas de processamento nos últimos 5 minutos."
+
+      - alert: OrchestratorOutboxDispatchFailures
+        expr: sum(rate(orchestrator_outbox_dispatch_total{outcome="failed"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: conversation-orchestrator
+        annotations:
+          summary: "Falhas no dispatcher da Outbox"
+          description: "Efeitos obrigatórios da jornada não estão sendo publicados com sucesso."
+
+      - alert: OrchestratorLateMessagesIncreasing
+        expr: sum(rate(orchestrator_late_messages_total[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: conversation-orchestrator
+        annotations:
+          summary: "Mensagens atrasadas em crescimento"
+          description: "Mensagens estão chegando fora de ordem de forma contínua."
+
+      - alert: AuthenticationFailuresIncreasing
+        expr: sum(rate(internal_auth_failures_total[5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "Falhas de autenticação interna"
+          description: "Tokens inválidos, audiência incorreta ou tenant divergente foram rejeitados."
+
+      - alert: GovernedToolPolicyDenied
+        expr: sum(rate(governed_tool_policy_denied_total[5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: tool-service-renegotiation
+        annotations:
+          summary: "Execução de tool negada pela policy"
+          description: "A policy determinística bloqueou uma tentativa de execução de tool."
