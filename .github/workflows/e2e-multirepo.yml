@@ -1,0 +1,125 @@
+name: Multi-repository E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multi-repository-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      MULTIREPO_READ_TOKEN: ${{ secrets.MULTIREPO_READ_TOKEN }}
+    steps:
+      - name: Require cross-repository read token
+        run: |
+          test -n "$MULTIREPO_READ_TOKEN" || {
+            echo "::error::Configure MULTIREPO_READ_TOKEN with read-only access to the 12 service repositories."
+            exit 1
+          }
+
+      - uses: actions/checkout@v7
+        with:
+          path: conversational-ai-platform-architecture
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/whatsapp-bff
+          path: whatsapp-bff
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/conversation-orchestrator
+          path: conversation-orchestrator
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/agent-runtime-renegotiation
+          path: agent-runtime-renegotiation
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/tool-service-renegotiation
+          path: tool-service-renegotiation
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/renegotiation-service
+          path: renegotiation-service
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/agent-runtime-fatura-cartao
+          path: agent-runtime-fatura-cartao
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/tool-service-cartao-credito
+          path: tool-service-cartao-credito
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/knowledge-service
+          path: knowledge-service
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/conversation-memory-service
+          path: conversation-memory-service
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/conversation-audit-service
+          path: conversation-audit-service
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/conversation-handoff-service
+          path: conversation-handoff-service
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/core-bancario-mock
+          path: core-bancario-mock
+          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Execute build, tests and signed-webhook E2E
+        working-directory: conversational-ai-platform-architecture
+        run: scripts/e2e-multirepo.sh
+
+      - name: Upload E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: multi-repository-e2e-evidence
+          if-no-files-found: warn
+          retention-days: 30
+          path: conversational-ai-platform-architecture/artifacts/e2e
