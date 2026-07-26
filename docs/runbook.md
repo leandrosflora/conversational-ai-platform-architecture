@@ -1,14 +1,18 @@
-# Runbook — Plataforma de IA Conversacional P0/P1
+# Runbook — Plataforma de IA Conversacional
 
-Este documento descreve o estado implementado nos branches `agent/p0-consistency-policy`. A arquitetura-alvo permanece em `docs/architecture/C4/c4-container-target.puml`.
+## 1. Escopo e classificação
 
-## 1. Repositórios e implantação coordenada
+Este runbook descreve o estado do branch `main` do repositório `conversational-ai-platform-architecture`. A solução é uma referência executável/POC endurecida; não é classificada como production-ready bancário.
+
+A arquitetura-alvo permanece em `docs/architecture/C4/c4-container-target.puml`.
+
+## 2. Layout do workspace
 
 Os repositórios devem ficar como pastas irmãs:
 
 ```text
 workspace/
-├── conversational-ai-demo-arch/
+├── conversational-ai-platform-architecture/
 ├── whatsapp-bff/
 ├── conversation-orchestrator/
 ├── agent-runtime-renegotiation/
@@ -23,132 +27,73 @@ workspace/
 └── core-bancario-mock/
 ```
 
-Os contratos de tenant e policy mudaram em toda a cadeia. Não implante somente um serviço P0. O conjunto precisa ser validado e liberado de forma coordenada.
+Mudanças de tenant, autenticação, contratos ou journey state exigem implantação e validação coordenadas.
 
-O Renegotiation Service envia JWT, tenant e `Idempotency-Key`, mas o `core-bancario-mock` ainda não valida integralmente essas garantias.
+## 3. Configuração
 
-## 2. Configuração obrigatória
+Crie `.env` na raiz do repositório de arquitetura. Use `.env.example` como fonte canônica. Cada par emissor/audiência possui segredo independente no ambiente local.
 
-Crie `.env` na raiz de `conversational-ai-demo-arch`. Desde a mudança `per-service-internal-auth-secrets`, cada par (emissor, audiência) de chamada interna tem seu próprio segredo — não existe mais um `INTERNAL_AUTH_SIGNING_KEY` único. Gere os 13 valores (cada um com pelo menos 32 bytes, ex: `python -c "import secrets; print(secrets.token_urlsafe(48))"`); a lista completa e comentada está em `.env.example`:
-
-```dotenv
-INTERNAL_AUTH_SECRET_WHATSAPP_BFF__CONVERSATION_ORCHESTRATOR=<segredo>
-INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__WHATSAPP_BFF=<segredo>
-INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_RENEGOTIATION=<segredo>
-INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_AUDIT_SERVICE=<segredo>
-INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_HANDOFF_SERVICE=<segredo>
-INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__CONVERSATION_MEMORY_SERVICE=<segredo>
-INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__TOOL_SERVICE_RENEGOTIATION=<segredo>
-INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__KNOWLEDGE_SERVICE=<segredo>
-INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__CONVERSATION_MEMORY_SERVICE=<segredo>
-INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE=<segredo>
-INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO=<segredo>
-INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO=<segredo>
-INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK=<segredo>
-DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
-OPENAI_API_KEY=
-MOCK_AGENT_ENABLED=true
+```bash
+cp .env.example .env
 ```
 
-`tool-service-cartao-credito` assina e envia um token para `core-bancario-mock`, mas ele não é validado do outro lado: o mock não tem autenticação própria (ver [`docs/services/tool-service-cartao-credito.md`](services/tool-service-cartao-credito.md)).
-
-Gere uma chave local:
+Gere segredos locais com pelo menos 32 bytes:
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-`DEFAULT_TENANT_ID` precisa ser UUID não vazio. Todos os serviços comparam o header `X-Tenant-Id` com a claim assinada `tenant_id`.
+Nunca versione valores reais.
 
-## 3. Build e testes obrigatórios antes do merge
+## 4. Validações antes do merge
 
-### .NET
+O CI executa:
 
-Execute em cada repositório .NET:
+- validação do Docker Compose;
+- deriva Compose × contratos;
+- configuração Alloy, Prometheus e Alertmanager;
+- sintaxe de scripts;
+- frescor da documentação canônica;
+- geração/verificação dos diagramas C4;
+- MkDocs strict;
+- links;
+- Trivy, SARIF e SBOM;
+- smoke test real da infraestrutura.
 
-```bash
-dotnet restore
-dotnet build --no-restore
-dotnet test --no-build
-```
+Cada repositório de serviço também precisa executar build/testes próprios. O `core-bancario-mock` já possui CI de restore/build, mas ainda não possui projeto de testes.
 
-Repositórios:
-
-- `whatsapp-bff`;
-- `conversation-orchestrator`;
-- `renegotiation-service`;
-- `conversation-audit-service`;
-- `conversation-handoff-service`.
-
-### Python
-
-Em cada serviço Python:
+## 5. Subida local
 
 ```bash
-python -m venv .venv
-# Linux/macOS
-source .venv/bin/activate
-# Windows PowerShell
-# .venv\Scripts\Activate.ps1
-
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pytest -q
+scripts/write-ci-env.sh
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.override.yml ps
 ```
 
-Repositórios:
+## 6. Portas
 
-- `agent-runtime-renegotiation`;
-- `tool-service-renegotiation`;
-- `agent-runtime-fatura-cartao`;
-- `tool-service-cartao-credito`;
-- `knowledge-service`;
-- `conversation-memory-service`.
-
-## 4. Subida do ambiente
-
-```bash
-docker compose up -d --build
-```
-
-Verifique:
-
-```bash
-docker compose ps
-```
-
-A sobreposição `docker-compose.override.yml` adiciona:
-
-- autenticação interna e tenant padrão do canal;
-- Redis para idempotência de respostas outbound;
-- PostgreSQL para Inbox, estado versionado, Outbox e idempotência de simulação;
-- migração MongoDB para unicidade tenant-scoped;
-- tópicos Kafka de retry e DLQ.
-
-## 5. Portas
-
-| Serviço | Porta host | Readiness |
+| Serviço | Porta host | Sinal |
 |---|---:|---|
-| whatsapp-bff | `5153` | `http://localhost:5153/health/ready` |
-| conversation-orchestrator | `5268` | `http://localhost:5268/health/ready` |
-| agent-runtime-renegotiation | `8100` | `http://localhost:8100/health/ready` |
-| agent-runtime-fatura-cartao | `8110` | `http://localhost:8110/health/ready` |
-| conversation-handoff-service | `8200` | `http://localhost:8200/health/ready` |
-| conversation-audit-service | `8300` | `http://localhost:8300/health/ready` |
-| tool-service-renegotiation MCP | `8400` | health no REST |
-| tool-service-renegotiation REST | `8401` | `http://localhost:8401/health/ready` |
-| tool-service-cartao-credito MCP | `8410` | health no REST |
-| tool-service-cartao-credito REST | `8411` | `http://localhost:8411/health/ready` |
-| knowledge-service | `8500` | `http://localhost:8500/health/ready` |
-| conversation-memory-service | `8600` | `http://localhost:8600/health/ready` |
-| renegotiation-service | `5266` | `http://localhost:5266/health/ready` |
-| Core mock | `9401`–`9405` | pendente |
+| whatsapp-bff | `5153` | `/health/ready` |
+| conversation-orchestrator | `5268` | `/health/ready` |
+| agent-runtime-renegotiation | `8100` | `/health/ready` |
+| agent-runtime-fatura-cartao | `8110` | `/health/ready` |
+| conversation-handoff-service | `8200` | `/health/ready` |
+| conversation-audit-service | `8300` | `/health/ready` |
+| tool-service-renegotiation REST | `8401` | `/health/ready` |
+| tool-service-cartao-credito REST | `8411` | `/health/ready` |
+| knowledge-service | `8500` | `/health/ready` |
+| conversation-memory-service | `8600` | `/health/ready` |
+| renegotiation-service | `5266` | `/health/ready` |
+| core-bancario-mock | `9401`–`9405` | health dedicado pendente |
 | Kafka UI | `8080` | UI |
 | Jaeger | `16686` | UI |
-| Prometheus | `9090` | UI |
+| Prometheus | `9090` | UI/API |
+| Alertmanager | `9093` | UI/API |
 | Grafana | `3001` | UI |
+| Alloy | `12345` | UI/ready |
 
-## 6. Tenant e autenticação
+## 7. Autenticação interna
 
 Chamadas internas usam:
 
@@ -157,267 +102,178 @@ Authorization: Bearer <JWT>
 X-Tenant-Id: <UUID>
 ```
 
-O JWT inclui:
+Claims comuns:
 
 ```text
-iss, sub, aud, iat, exp, jti, tenant_id
+iss, sub, aud, iat, exp, jti, tenant_id, kid
 ```
 
 Resultados esperados:
 
 - sem token: `401`;
-- tenant ausente ou não UUID: `400`;
-- header diferente da claim: `403`.
+- tenant ausente ou inválido: `400`;
+- header diferente da claim: `403`;
+- caller/audiência não permitidos: `403`.
 
-### Tokens de tools
+A exceção atual é o `core-bancario-mock`, que recebe headers em alguns hops mas ainda não os valida.
 
-Agent Runtime → Tool Service:
+## 8. Persistência e consistência
 
-```text
-token_use=tool_execution
-conversation_id
-message_id
-journey_stage
-journey_version
-confirmation_message_id (quando aplicável)
-```
-
-Tool Service → Renegotiation Service:
-
-```text
-token_use=governed_tool
-tool_name
-policy_id
-mesmo contexto da jornada
-```
-
-O `policy_id` precisa ser igual ao `Idempotency-Key` da operação.
-
-> As seções 7 a 15 descrevem as garantias de consistência P0 (Inbox/Outbox, idempotência de simulação, policy enforcement por estágio) implementadas para a jornada de **renegociação**. A skill de **fatura/limite de cartão de crédito** (`agent-runtime-fatura-cartao` → `tool-service-cartao-credito` → `core-bancario-mock`) é somente-leitura e não tem equivalente a nenhuma delas por desenho — sem tabela de idempotência própria, sem policy por estágio de jornada (autorização é só por serviço chamador) e sem retry entre agente e tool service. Ver [diagrama de sequência §5](architecture/sequence-diagrams.md#5-consulta-de-faturalimite-de-cartao-de-credito-segunda-skill).
-
-## 7. Persistência e migrações
-
-### PostgreSQL
-
-Tabelas P0:
+PostgreSQL:
 
 ```text
 ops.message_inbox
 ops.conversation_state
 ops.orchestrator_outbox
 ops.renegotiation_idempotency
+ops.audit_events
+conversation.handoffs
 ```
 
-Índices compostos:
+MongoDB:
 
 ```text
-ops.audit_events        (tenant_id, idempotency_key)
-conversation.handoffs   (tenant_id, idempotency_key)
-```
-
-Consulte o estado:
-
-```sql
-SELECT tenant_id, message_id, status, completion_reason, attempt_count, last_error
-FROM ops.message_inbox
-ORDER BY received_at DESC;
-
-SELECT tenant_id, conversation_id, journey_stage, version,
-       last_received_at, processing_message_id, processing_lease_until
-FROM ops.conversation_state;
-
-SELECT tenant_id, conversation_id, journey_version, effect_type, status,
-       attempt_count, next_attempt_at, last_error
-FROM ops.orchestrator_outbox
-ORDER BY created_at;
-
-SELECT tenant_id, idempotency_key, request_hash, status, last_error, completed_at
-FROM ops.renegotiation_idempotency
-ORDER BY created_at DESC;
-```
-
-### MongoDB
-
-A coleção `conversation_messages` deve possuir:
-
-```text
+conversation_messages
 unique partial index: (tenantId, externalMessageId)
 ```
 
-O índice global legado `externalMessageId_1` deve ter sido removido.
-
-### OpenSearch
-
-O índice físico usa UUID canônico:
+OpenSearch:
 
 ```text
-faq_chunks-00000000-0000-0000-0000-000000000001
+faq_chunks-<tenant-uuid>
 ```
 
-## 8. Semântica do Inbox e Outbox
+O `202` do Orchestrator significa que estado e efeitos obrigatórios foram registrados; não significa que todos os downstreams já concluíram.
 
-Um `202` do Orchestrator significa:
+## 9. Kafka
 
-> estado e efeitos obrigatórios foram registrados na mesma transação.
+Tópicos críticos:
 
-Não significa que WhatsApp, Memory, Audit ou Handoff já concluíram.
-
-O dispatcher:
-
-- usa lease e `FOR UPDATE SKIP LOCKED`;
-- tenta cada efeito at-least-once;
-- marca sucesso como `published`;
-- marca falha como `failed` com backoff;
-- bloqueia versões posteriores da conversa enquanto uma versão anterior não estiver totalmente publicada.
-
-### Efeito permanentemente falho
-
-Um efeito anterior falho bloqueia versões posteriores da mesma conversa. Procedimento:
-
-1. identificar a causa pelo `last_error` e logs;
-2. corrigir o downstream/configuração;
-3. ajustar `next_attempt_at=now()` ou aguardar o backoff;
-4. não marcar `published` manualmente sem evidência de que o destino recebeu ou deduplicará o efeito.
-
-## 9. Idempotência dos destinos
-
-| Destino | Chave |
-|---|---|
-| BFF outbound | Redis por tenant + hash da chave da Outbox |
-| Memory | `(tenantId, externalMessageId)` |
-| Audit | `(tenant_id, idempotency_key)` |
-| Handoff | `(tenant_id, idempotency_key)` |
-| Simulação | `(tenant_id, operation, idempotency_key)` + request hash |
-
-## 10. Ordenação e mensagens atrasadas
-
-O Orchestrator mantém uma versão por conversa.
-
-- apenas uma mensagem mantém lease ativo;
-- conclusão exige a versão esperada;
-- evento anterior ou igual ao último `(receivedAt, messageId)` é concluído com `completion_reason=late_message`;
-- late message não chama Agent Runtime nem executa tools.
-
-Teste recomendado:
-
-1. envie mensagem A e force falha antes da conclusão;
-2. envie mensagem B para a mesma conversa;
-3. confirme `409`/retry enquanto A mantém lease;
-4. reprocesse A;
-5. confirme que B recebe a versão seguinte;
-6. injete novamente A e confirme `late_message`.
-
-## 11. Policy enforcement
-
-Testes mínimos:
-
-1. `confirmar_acordo` em `EligibilityChecked` deve ser negada;
-2. confirmação sem `confirmation_message_id` deve ser negada;
-3. confirmação com ID diferente da mensagem atual deve ser negada;
-4. `policy_id` diferente do `Idempotency-Key` deve ser negado pelo Renegotiation Service;
-5. token com caller diferente do Agent Runtime/Tool Service deve ser negado;
-6. simulação em estágio permitido deve gerar a mesma chave para o mesmo contexto/request.
-
-## 12. Simulação idempotente e reconciliação
-
-Comportamentos:
-
-- chave nova: executa e persiste a resposta;
-- chave concluída: retorna a mesma resposta sem Core;
-- mesma chave com payload diferente: `409` não retryable;
-- chave `processing` ou `failed`: `409` retryable, mas não é readquirida automaticamente.
-
-### Reconciliação de resultado ambíguo
-
-Enquanto o Core mock não validar idempotência:
-
-1. não apague a linha nem mude para `failed` esperando retry automático;
-2. consulte o Core/logs para verificar se a simulação foi criada;
-3. se criada, grave a resposta correspondente e marque `completed` por procedimento auditado;
-4. se comprovadamente não criada, gere uma nova operação com nova mensagem/contexto e nova chave;
-5. nunca reutilize a chave antiga com parâmetros diferentes.
-
-## 13. Kafka, retry e DLQ
-
-Tópicos:
-
-| Tópico | Finalidade |
-|---|---|
-| `channel.webhook.received` | entrada confirmada antes do ACK |
-| `channel.webhook.received.retry` | retry durável |
-| `channel.webhook.received.dlq` | poison ou tentativas esgotadas |
-
-O offset original só é commitado após confirmação de retry/DLQ ou `202` do Orchestrator.
-
-## 14. Métricas e alertas mínimos
-
-Adicionar alertas para:
-
-```promql
-rate(channel_webhook_dead_letter_total[5m]) > 0
-rate(orchestrator_processing_failures_total[5m]) > 0
-rate(orchestrator_late_messages_total[5m]) > 0
-rate(orchestrator_outbox_dispatch_total{outcome="failed"}[5m]) > 0
+```text
+channel.webhook.received
+channel.webhook.received.retry
+channel.webhook.received.dlq
 ```
 
-Também monitorar via SQL:
+O offset original só é commitado após processamento ou publicação confirmada em retry/DLQ.
 
-- idade do efeito não publicado mais antigo;
-- quantidade de efeitos `failed`;
-- conversas com `processing_lease_until < now()`;
-- simulações `processing`/`failed` antigas.
-
-## 15. Checklist E2E P0
-
-1. todos os builds e testes passam;
-2. todos os readiness retornam `200`;
-3. token sem `tenant_id` é rejeitado;
-4. header/claim divergentes retornam `403`;
-5. falha do BFF outbound deixa efeito na Outbox e não perde resposta;
-6. replay da resposta retorna o mesmo `messageId` do Redis;
-7. falha de Memory/Audit/Handoff deixa efeito retryable;
-8. a versão seguinte fica bloqueada enquanto efeito anterior falha;
-9. mensagens concorrentes da mesma conversa não chamam o agente em paralelo;
-10. mensagem atrasada recebe `late_message`;
-11. simulação repetida retorna resposta persistida;
-12. simulação com mesma chave e parâmetros diferentes retorna conflito;
-13. confirmação sem evidência assinada é negada;
-14. índices e chaves não colidem entre dois tenants.
-
-## 16. Limitações restantes
-
-- Core mock ainda não valida JWT, policy proof e idempotência;
-- a skill de fatura/limite de cartão de crédito não tem Inbox/Outbox, idempotência de simulação nem policy por estágio — não é uma lacuna, é porque a skill é somente-leitura e não tem operação a proteger;
-- HS256 compartilhado não é identidade final;
-- Handoff não integra plataforma humana;
-- Kafka/OpenSearch/Redis/PostgreSQL locais não representam configuração de produção;
-- não há CI obrigatório, SAST, SCA, SBOM ou assinatura de imagem;
-- alertas e procedimento automatizado de replay/reconciliação ainda não estão provisionados.
-
-## 17. Reset
+## 10. Observabilidade e alertas
 
 ```bash
-docker compose down
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d \
+  jaeger loki alloy alertmanager prometheus grafana
+```
+
+Prometheus carrega regras de `config/prometheus/rules/`. Alertmanager local usa receiver nulo para não enviar notificações acidentalmente.
+
+Consulte:
+
+- `docs/operations/slo-alerting.md`;
+- `http://localhost:9090/alerts`;
+- `http://localhost:9093`;
+- `http://localhost:3001`.
+
+## 11. E2E multi-repositório
+
+Execução local:
+
+```bash
+scripts/e2e-multirepo.sh
+```
+
+O script:
+
+1. registra o commit de cada repositório;
+2. executa build/testes .NET e Python;
+3. sobe o Compose completo;
+4. espera readiness;
+5. envia webhook Meta assinado;
+6. verifica o Inbox do Orchestrator;
+7. valida Core/Card, Kafka, Prometheus e evidências;
+8. executa um baseline k6.
+
+No GitHub Actions, configure `MULTIREPO_READ_TOKEN` com acesso somente leitura aos 12 repositórios. O workflow roda manualmente e semanalmente.
+
+## 12. Backup e restore
+
+```bash
+scripts/backup-local.sh
+```
+
+Restore de PostgreSQL/MongoDB é destrutivo e exige consentimento explícito:
+
+```bash
+ALLOW_DESTRUCTIVE_RESTORE=true \
+  scripts/restore-local.sh backups/<timestamp>
+```
+
+Consulte `docs/operations/disaster-recovery.md`.
+
+## 13. Carga e caos
+
+```bash
+docker run --rm --network host \
+  -e BASE_URL=http://localhost:5153 \
+  -v "$PWD/tests/load:/tests:ro" \
+  grafana/k6:2.0.0 run /tests/readiness.js
+```
+
+Chaos drill local:
+
+```bash
+ALLOW_DESTRUCTIVE_DRILL=true \
+  scripts/chaos-drill.sh conversation-memory-service
+```
+
+Consulte `docs/testing/load-and-chaos.md`.
+
+## 14. LGPD e retenção
+
+A matriz técnica inicial está em `docs/governance/data-retention-lgpd.md`. Os prazos são referência e precisam de aprovação de Jurídico/LGPD/Negócio.
+
+## 15. Reset
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml down
 ```
 
 Reset completo:
 
 ```bash
-docker compose down -v
+docker compose -f docker-compose.yml -f docker-compose.override.yml down -v
 ```
 
-Scripts de inicialização executam apenas em volumes vazios. Os serviços aplicam migrações idempotentes para volumes existentes, mas esse caminho precisa ser testado antes do merge.
+## 16. Limitações restantes
 
-## 18. Troubleshooting conhecido
+- `core-bancario-mock` ainda não valida JWT/tenant/idempotência e não possui health dedicado;
+- HS256 por par ainda é identidade simétrica sem rotação automatizada;
+- Handoff não integra plataforma humana real;
+- receiver de Alertmanager é local/nulo;
+- Kafka, OpenSearch e rede continuam em configuração local;
+- assinatura/atestado de imagens deve ser implementada em cada repositório de serviço;
+- retenção, exclusão e criptografia gerenciada dependem de implementação e aprovação corporativas;
+- restore de Kafka/OpenSearch continua baseado em reconstrução/replay;
+- E2E multi-repositório depende do secret `MULTIREPO_READ_TOKEN`.
 
-### `kafka-init` sai com `exit 2`
+## 17. Troubleshooting
 
-Mantenha o `for topic in ...; do` e o comando `kafka-topics.sh` em linhas YAML que sejam dobradas corretamente. Não quebre cada argumento com indentação adicional.
+### Compose exige segredo
 
-### Readiness Python acusa Kafka indisponível com broker saudável
+Execute `scripts/write-ci-env.sh` para placeholders de CI ou preencha `.env` com valores locais.
 
-Use `producer.list_topics(timeout=1)`. O argumento posicional `1` seria interpretado como tópico.
+### Kafka init falha
 
-### Compose falha com `Set INTERNAL_AUTH_SECRET_<PAR> in .env`
+Mantenha o loop de criação de tópicos como bloco shell único e valide com:
 
-Falta uma das 13 variáveis de segredo por par em `.env` — veja a lista completa em `.env.example`. Cada uma é independente; não versionar valores reais.
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml config
+```
+
+### Regra Prometheus não carrega
+
+```bash
+docker run --rm --entrypoint /bin/promtool \
+  -v "$PWD/config/prometheus:/etc/prometheus:ro" \
+  prom/prometheus:v2.53.1 \
+  check config /etc/prometheus/prometheus.yml
+```
