@@ -4,10 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       core_ref:
-        description: Core mock branch/tag/commit to validate
+        description: Optional Core mock branch/tag/commit override
         required: false
-        default: master
+        default: ""
         type: string
+      run_load_test:
+        description: Execute the signed webhook load baseline
+        required: true
+        default: true
+        type: boolean
+      run_online_evals:
+        description: Execute deterministic evals against both running agent runtimes
+        required: true
+        default: true
+        type: boolean
   schedule:
     - cron: "0 6 * * 1"
 
@@ -21,9 +31,11 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     env:
       MULTIREPO_READ_TOKEN: ${{ secrets.MULTIREPO_READ_TOKEN }}
+      RUN_LOAD_TEST: ${{ github.event_name != 'workflow_dispatch' || inputs.run_load_test }}
+      RUN_ONLINE_EVALS: ${{ github.event_name != 'workflow_dispatch' || inputs.run_online_evals }}
     steps:
       - name: Require cross-repository read token
         run: |
@@ -37,96 +49,54 @@ jobs:
           path: conversational-ai-platform-architecture
           token: ${{ secrets.MULTIREPO_READ_TOKEN }}
 
-      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          repository: leandrosflora/whatsapp-bff
-          path: whatsapp-bff
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+          python-version: "3.12"
 
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/conversation-orchestrator
-          path: conversation-orchestrator
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+      - name: Resolve release manifest to exact SHAs
+        env:
+          CORE_REF_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.core_ref || '' }}
+        run: |
+          python -m pip install --disable-pip-version-check pyyaml
+          mkdir -p conversational-ai-platform-architecture/artifacts/e2e
+          cp conversational-ai-platform-architecture/release/release-manifest.yaml \
+            conversational-ai-platform-architecture/artifacts/e2e/runtime-release-manifest.yaml
+          if [ -n "$CORE_REF_OVERRIDE" ]; then
+            python - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
 
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/agent-runtime-renegotiation
-          path: agent-runtime-renegotiation
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/tool-service-renegotiation
-          path: tool-service-renegotiation
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/renegotiation-service
-          path: renegotiation-service
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/agent-runtime-fatura-cartao
-          path: agent-runtime-fatura-cartao
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/tool-service-cartao-credito
-          path: tool-service-cartao-credito
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/knowledge-service
-          path: knowledge-service
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/conversation-memory-service
-          path: conversation-memory-service
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/conversation-audit-service
-          path: conversation-audit-service
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/conversation-handoff-service
-          path: conversation-handoff-service
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: leandrosflora/core-bancario-mock
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.core_ref || 'master' }}
-          path: core-bancario-mock
-          token: ${{ secrets.MULTIREPO_READ_TOKEN }}
+          path = Path("conversational-ai-platform-architecture/artifacts/e2e/runtime-release-manifest.yaml")
+          data = yaml.safe_load(path.read_text(encoding="utf-8"))
+          for repository in data["repositories"]:
+              if repository["name"] == "core-bancario-mock":
+                  repository["ref"] = os.environ["CORE_REF_OVERRIDE"]
+                  break
+          else:
+              raise SystemExit("core-bancario-mock is missing from release manifest")
+          path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+          PY
+          fi
+          python conversational-ai-platform-architecture/scripts/checkout-release.py \
+            conversational-ai-platform-architecture/artifacts/e2e/runtime-release-manifest.yaml \
+            "$GITHUB_WORKSPACE" \
+            --reuse conversational-ai-platform-architecture \
+            --lock conversational-ai-platform-architecture/artifacts/e2e/release-lock.yaml
 
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Execute build, tests and signed-webhook E2E
+      - name: Execute builds, contracts, evals and signed-webhook E2E
         working-directory: conversational-ai-platform-architecture
         run: scripts/e2e-multirepo.sh
 
-      - name: Upload E2E evidence
+      - name: Upload E2E evidence and locked release manifest
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: multi-repository-e2e-evidence
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
           path: conversational-ai-platform-architecture/artifacts/e2e
