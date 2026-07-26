@@ -11,6 +11,7 @@ CANONICAL_FILES = [
     Path("docs/security/security-architecture.md"),
     Path("docs/contracts/services-map.md"),
     Path("docs/services/core-bancario-mock.md"),
+    Path("docs/roadmap/production-readiness.md"),
 ]
 
 FORBIDDEN = {
@@ -18,6 +19,12 @@ FORBIDDEN = {
     "conversational-ai-demo-arch/": "use conversational-ai-platform-architecture/",
     "não há CI obrigatório, SAST, SCA, SBOM": "o repositório já possui CI, Trivy e SBOM",
     "ainda precisa receber um workflow de CI": "core-bancario-mock já possui workflow de CI",
+    "continua build-only": "core-bancario-mock já executa testes de integração",
+    "health dedicado pendente": "core-bancario-mock possui live/readiness",
+    "mock ainda não o valida": "core-bancario-mock valida JWT no Compose integrado",
+    "não valida JWT em nenhuma": "core-bancario-mock valida callers e tenant no Compose integrado",
+    "A exceção atual é o `core-bancario-mock`": "o último hop já possui validação de identidade",
+    "autenticação/idempotência no Core mock": "baseline de auth/idempotência do Core foi implementado",
 }
 
 errors: list[str] = []
