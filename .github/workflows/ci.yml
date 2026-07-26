@@ -97,3 +97,19 @@ jobs:
 
       - name: Run infrastructure smoke test
         run: scripts/ci-smoke.sh
+
+  compose-config:
+    name: compose-config
+    if: ${{ always() }}
+    needs:
+      - static-validation
+      - infrastructure-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce replacement checks
+        env:
+          STATIC_VALIDATION_RESULT: ${{ needs.static-validation.result }}
+          INFRASTRUCTURE_SMOKE_RESULT: ${{ needs.infrastructure-smoke.result }}
+        run: |
+          test "$STATIC_VALIDATION_RESULT" = "success"
+          test "$INFRASTRUCTURE_SMOKE_RESULT" = "success"
