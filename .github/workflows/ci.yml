@@ -33,7 +33,17 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.override.yml config --format json > /tmp/compose.json
 
       - name: Validate canonical contracts against Compose
-        run: python scripts/validate-contract-drift.py /tmp/compose.json
+        run: |
+          set -o pipefail
+          python scripts/validate-contract-drift.py /tmp/compose.json 2>&1 | tee contract-validation.log
+
+      - name: Upload contract validation diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-validation-diagnostics
+          if-no-files-found: error
+          path: contract-validation.log
 
       - name: Validate Grafana Alloy configuration
         run: |
