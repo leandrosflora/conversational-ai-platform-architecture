@@ -29,7 +29,7 @@ O Renegotiation Service envia JWT, tenant e `Idempotency-Key`, mas o `core-banca
 
 ## 2. Configuração obrigatória
 
-Crie `.env` na raiz de `conversational-ai-demo-arch`. Desde a mudança `per-service-internal-auth-secrets`, cada par (emissor, audiência) de chamada interna tem seu próprio segredo — não existe mais um `INTERNAL_AUTH_SIGNING_KEY` único. Gere os 12 valores (cada um com pelo menos 32 bytes, ex: `python -c "import secrets; print(secrets.token_urlsafe(48))"`); a lista completa e comentada está em `.env.example`:
+Crie `.env` na raiz de `conversational-ai-demo-arch`. Desde a mudança `per-service-internal-auth-secrets`, cada par (emissor, audiência) de chamada interna tem seu próprio segredo — não existe mais um `INTERNAL_AUTH_SIGNING_KEY` único. Gere os 13 valores (cada um com pelo menos 32 bytes, ex: `python -c "import secrets; print(secrets.token_urlsafe(48))"`); a lista completa e comentada está em `.env.example`:
 
 ```dotenv
 INTERNAL_AUTH_SECRET_WHATSAPP_BFF__CONVERSATION_ORCHESTRATOR=<segredo>
@@ -44,12 +44,13 @@ INTERNAL_AUTH_SECRET_AGENT_RUNTIME_RENEGOTIATION__CONVERSATION_MEMORY_SERVICE=<s
 INTERNAL_AUTH_SECRET_TOOL_SERVICE_RENEGOTIATION__RENEGOTIATION_SERVICE=<segredo>
 INTERNAL_AUTH_SECRET_CONVERSATION_ORCHESTRATOR__AGENT_RUNTIME_FATURA_CARTAO=<segredo>
 INTERNAL_AUTH_SECRET_AGENT_RUNTIME_FATURA_CARTAO__TOOL_SERVICE_CARTAO_CREDITO=<segredo>
+INTERNAL_AUTH_SECRET_TOOL_SERVICE_CARTAO_CREDITO__CORE_BANCARIO_MOCK=<segredo>
 DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
 OPENAI_API_KEY=
 MOCK_AGENT_ENABLED=true
 ```
 
-`tool-service-cartao-credito` não recebe segredo outbound: ele chama `core-bancario-mock` diretamente, que não tem autenticação própria (ver [`docs/services/tool-service-cartao-credito.md`](services/tool-service-cartao-credito.md)).
+`tool-service-cartao-credito` assina e envia um token para `core-bancario-mock`, mas ele não é validado do outro lado: o mock não tem autenticação própria (ver [`docs/services/tool-service-cartao-credito.md`](services/tool-service-cartao-credito.md)).
 
 Gere uma chave local:
 
@@ -419,4 +420,4 @@ Use `producer.list_topics(timeout=1)`. O argumento posicional `1` seria interpre
 
 ### Compose falha com `Set INTERNAL_AUTH_SECRET_<PAR> in .env`
 
-Falta uma das 12 variáveis de segredo por par em `.env` — veja a lista completa em `.env.example`. Cada uma é independente; não versionar valores reais.
+Falta uma das 13 variáveis de segredo por par em `.env` — veja a lista completa em `.env.example`. Cada uma é independente; não versionar valores reais.

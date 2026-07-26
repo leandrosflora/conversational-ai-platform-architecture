@@ -22,7 +22,7 @@ Qualquer CPF fora dessas listas continua com dado gerado inline a cada chamada (
 | `9402` | EligibilityApi | `GET /contracts/{contractId}/eligibility` |
 | `9403` | ContractingApi | `POST /contracts/{contractId}/simulations` |
 | `9404` | FormalizationApi | `POST /simulations/{simulationId}/confirmations` · `GET /agreements/{agreementId}/document` |
-| `9405` | CardApi | `GET /clients/{cpf}/card/limit` · `GET /clients/{cpf}/card/invoice` — sem autenticação própria (diferente das 4 APIs acima, que recebem tenant/JWT/Idempotency-Key mesmo sem validá-los integralmente); consumida diretamente por `tool-service-cartao-credito`, não pelo `renegotiation-service` |
+| `9405` | CardApi | `GET /clients/{cpf}/card/limit` · `GET /clients/{cpf}/card/invoice` — recebe tenant/JWT de `tool-service-cartao-credito`, mas como as 4 APIs acima, não os valida; consumida diretamente por `tool-service-cartao-credito`, não pelo `renegotiation-service` |
 
 ## Eventos publicados / consumidos
 

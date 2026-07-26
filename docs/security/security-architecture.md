@@ -11,7 +11,7 @@ Este documento descreve controles existentes no código. A arquitetura-alvo perm
 | Tenant → serviço | UUID canônico presente simultaneamente em claim assinada e `X-Tenant-Id` |
 | Agent Runtime → Tool Service | JWT `tool_execution` com conversa, mensagem, estágio, versão e evidência de confirmação (skill cartão de crédito: sem `journey_stage`/estágio, já que a policy ali é só por identidade do chamador) |
 | Tool Service (renegociação) → Renegotiation Service | JWT `governed_tool` com tool autorizada e `policy_id` ligado à `Idempotency-Key` |
-| Tool Service (cartão de crédito) → Core Bancário Mock (Card API) | **Sem autenticação** — `core-bancario-mock` não valida token próprio nessa API; único hop síncrono da plataforma sem JWT em nenhuma ponta |
+| Tool Service (cartão de crédito) → Core Bancário Mock (Card API) | JWT enviado (`X-Tenant-Id` + `Authorization: Bearer`), mas **não validado** — `core-bancario-mock` não tem middleware de auth para nenhuma de suas 5 APIs; único hop síncrono da plataforma sem verificação na ponta receptora |
 | Entrada → negócio | Kafka confirmado antes do ACK; Inbox e estado transacionais |
 | Side effects | Outbox durável, replay at-least-once e deduplicação no destino |
 | Dados | chaves, queries e índices tenant-scoped |
@@ -75,7 +75,7 @@ O Renegotiation Service exige:
 
 Assim, prompt ou tool call do LLM não são suficientes para autorizar uma operação financeira.
 
-**A skill de cartão de crédito não tem esse segundo salto.** `tool-service-cartao-credito` chama `core-bancario-mock` (Card API) diretamente, sem emitir nenhum token — não há um serviço de domínio intermediário para revalidar a decisão, porque as duas tools daquela skill são consultas de leitura sem simulação/confirmação a proteger. A defesa em profundidade de "dois serviços concordam antes de agir" que existe na renegociação simplesmente não se aplica aqui; a única barreira é a policy de identidade do chamador (§7).
+**A skill de cartão de crédito não tem esse segundo salto de domínio.** `tool-service-cartao-credito` emite um JWT de identidade de serviço e chama `core-bancario-mock` (Card API) diretamente. O mock recebe `Authorization` e `X-Tenant-Id`, mas não valida o token; essa chamada também não leva `Idempotency-Key` nem policy proof. Não há serviço de domínio intermediário para revalidar a decisão porque as duas tools são consultas de leitura sem simulação/confirmação a proteger. A defesa em profundidade de “dois serviços concordam antes de agir” existente na renegociação não se aplica aqui; a barreira efetiva permanece a policy de identidade do chamador (§7), somada à assinatura enviada ao último hop ainda não verificado.
 
 ### Limitação de identidade
 
@@ -208,7 +208,7 @@ Ainda faltam:
 - segurança do OpenSearch;
 - NetworkPolicy/service mesh;
 - WAF e rate limiting;
-- imagens assinadas e SBOM.
+- imagens assinadas e SBOM publicado em releases.
 
 ## 11. Observabilidade de segurança e consistência
 
@@ -227,13 +227,13 @@ Alertas ainda precisam ser provisionados; o código expõe séries, mas não ins
 
 ## 12. Lacunas críticas restantes
 
-1. **Core Bancário Mock:** não valida JWT, policy proof ou idempotência nas 4 APIs de renegociação; a Card API (`:9405`, usada pela skill de cartão de crédito) não tem autenticação própria de forma alguma — `tool-service-cartao-credito` a chama sem nenhum token, diferente de todo outro hop síncrono da plataforma.
-2. **Identidade:** HS256 compartilhado, sem rotação/JWKS.
+1. **Core Bancário Mock:** não valida JWT, policy proof ou idempotência em nenhuma das suas 5 APIs. As quatro APIs de renegociação recebem tenant, JWT e `Idempotency-Key`; a Card API recebe tenant e JWT, mas não recebe `Idempotency-Key` nem policy proof. Nenhuma das cinco verifica o token recebido.
+2. **Identidade:** HS256 por par, sem rotação/JWKS.
 3. **Handoff:** não integra plataforma humana real.
 4. **Infraestrutura:** Kafka/OpenSearch/rede locais sem controles de produção.
-5. **Supply chain:** sem CI obrigatório, SAST, SCA, SBOM e assinatura.
+5. **Supply chain:** o repositório de arquitetura passa a gerar SBOM e executar scan de vulnerabilidades, mas assinatura de artefatos e enforcement equivalente nos repositórios de serviço ainda faltam.
 6. **LGPD:** retenção, anonimização e exclusão ainda incompletas.
-7. **Evidência:** build, migração e E2E dos branches P0 ainda precisam ser executados.
+7. **Evidência:** build, migração e E2E multi-repositório continuam necessários antes de produção.
 
 ## 13. Classificação
 
