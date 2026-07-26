@@ -1,6 +1,6 @@
 # Conversational AI Platform Architecture
 
-Arquitetura de referência para plataformas corporativas de IA conversacional com agentes, MCP, RAG, WhatsApp, sistemas transacionais e observabilidade ponta a ponta.
+Arquitetura de referência executável para plataformas corporativas de IA conversacional com agentes, MCP, RAG, WhatsApp, sistemas transacionais, segurança interna e observabilidade ponta a ponta.
 
 [:material-sitemap-outline: Explorar a arquitetura](architecture/c4-context.md){ .md-button .md-button--primary }
 [:material-github: Ver o repositório](https://github.com/leandrosflora/conversational-ai-platform-architecture){ .md-button }
@@ -13,7 +13,7 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
     ---
 
-    WhatsApp Cloud API, OpenAI, Core Bancário Mock, 12 serviços, cinco datastores e observabilidade local executável.
+    WhatsApp Cloud API, OpenAI, Core Bancário Mock autenticado, 12 serviços, cinco datastores e observabilidade local executável.
 
     [Abrir C4 de contexto atual](architecture/C4/c4-context.puml)
 
@@ -35,7 +35,7 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
     ---
 
-    O runtime interpreta a intenção, mantém contexto e coordena ferramentas governadas para executar a jornada.
+    Runtime, contexto e ferramentas governadas coordenam jornadas de renegociação e cartão.
 
     [Agent Runtime](services/agent-runtime-renegotiation.md)
 
@@ -43,7 +43,7 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
     ---
 
-    Tool calling com autorização por estágio, separação de responsabilidades e contratos explícitos.
+    Tool calling com autorização determinística, caller allowlisted e contratos explícitos.
 
     [Tool Service MCP](services/tool-service-renegotiation.md)
 
@@ -51,25 +51,33 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
     ---
 
-    Conhecimento vetorial, memória de curto e longo prazo e isolamento por tenant sustentam respostas contextualizadas.
+    Conhecimento vetorial, memória de curto/longo prazo e isolamento por tenant.
 
     [Knowledge Service](services/knowledge-service.md)
 
--   :material-chart-timeline-variant:{ .lg .middle } **Observabilidade**
+-   :material-chart-timeline-variant:{ .lg .middle } **Observabilidade operacional**
 
     ---
 
-    Grafana Alloy, Loki, Jaeger, Prometheus e Grafana correlacionam logs, traces e métricas da plataforma.
+    Alloy, Loki, Jaeger, Prometheus, Alertmanager e Grafana correlacionam sinais e regras.
 
-    [Containers implementados](architecture/C4/c4-container-current.puml)
+    [SLOs e alertas](operations/slo-alerting.md)
 
--   :material-shield-check-outline:{ .lg .middle } **Segurança e auditoria**
+-   :material-shield-check-outline:{ .lg .middle } **Segurança e consistência**
 
     ---
 
-    HMAC, JWT interno por par de serviços, idempotência, trilha auditável e handoff humano protegem a operação.
+    HMAC, JWT por par, tenant assinado, Core autenticado, Inbox/Outbox e idempotência protegem a operação.
 
     [Arquitetura de segurança](security/security-architecture.md)
+
+-   :material-test-tube:{ .lg .middle } **Evidência executável**
+
+    ---
+
+    CI, E2E multi-repositório, SBOM, backup/restore e carga/caos produzem evidências auditáveis.
+
+    [Runbook](runbook.md)
 
 </div>
 
@@ -77,12 +85,13 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
 | Etapa | Responsabilidade |
 |---|---|
-| Entrada | WhatsApp BFF valida o webhook e garante uma entrada durável |
-| Orquestração | Conversation Orchestrator controla contexto, Inbox e Outbox |
-| Raciocínio | Agent Runtime decide a próxima ação da jornada |
-| Ferramentas | Tool Service MCP aplica governança às chamadas transacionais |
-| Negociação | Renegotiation Service consulta elegibilidade e simula propostas |
-| Suporte | Memória, conhecimento, auditoria e handoff completam a experiência |
+| Entrada | BFF valida assinatura e garante entrada durável |
+| Orquestração | Orchestrator controla Inbox, estado e Outbox |
+| Raciocínio | Agent Runtime decide a próxima ação |
+| Ferramentas | Tool Service aplica identidade e policy |
+| Domínio | Renegotiation Service revalida e coordena o Core |
+| Core | valida caller/tenant e protege operações mutáveis por chave |
+| Suporte | memória, conhecimento, auditoria e handoff completam a experiência |
 
 [Ver diagramas de sequência](architecture/sequence-diagrams.md){ .md-button }
 
@@ -90,14 +99,15 @@ Arquitetura de referência para plataformas corporativas de IA conversacional co
 
 | Capacidade | Tecnologia ou padrão |
 |---|---|
-| Serviços | .NET, Python, arquitetura hexagonal e APIs REST |
-| Agentes | Strands, OpenAI e MCP para ferramentas |
+| Serviços | .NET, Python, arquitetura hexagonal e REST |
+| Agentes | Strands, OpenAI e MCP |
 | Mensageria | Kafka, Inbox/Outbox e idempotência |
-| Conhecimento | OpenSearch com busca vetorial |
+| Conhecimento | OpenSearch vetorial |
 | Estado | PostgreSQL, MongoDB e Redis |
-| Segurança | HMAC, JWT interno e autorização de tools |
-| Observabilidade | OpenTelemetry, Grafana Alloy, Prometheus, Grafana, Loki e Jaeger |
-| Execução local | Docker Compose e Postman |
+| Segurança | HMAC, JWT por par, tenant assinado e tools governadas |
+| Observabilidade | OpenTelemetry, Alloy, Prometheus, Alertmanager, Grafana, Loki e Jaeger |
+| Supply chain | Trivy, SARIF e SBOM SPDX |
+| Execução | Docker Compose, GitHub Actions, k6 e scripts de drill |
 
 !!! success "Arquitetura executável"
-    Além dos diagramas e contratos, o projeto registra validações E2E reais e executa smoke test automatizado da infraestrutura no CI.
+    O projeto registra validações reais, smoke test de infraestrutura e um workflow E2E coordenado dos 12 serviços.
