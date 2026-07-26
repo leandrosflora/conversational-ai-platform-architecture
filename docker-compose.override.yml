@@ -30,11 +30,31 @@ services:
     networks:
       - conversational-ai
 
+  alertmanager:
+    image: prom/alertmanager:v0.32.1
+    container_name: conversational-ai-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - conversational-ai
+
+  prometheus:
+    volumes:
+      - ./config/prometheus/rules:/etc/prometheus/rules:ro
+    depends_on:
+      - alertmanager
+
   kafka-init:
     command: >
       "
       for topic in channel.message.received channel.message.status channel.webhook.received channel.webhook.received.retry channel.webhook.received.dlq intent.detected conversation.state_changed agent.events tool.executed; do
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic \"$$topic\" --partitions 3 --replication-factor 1;
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$topic" --partitions 3 --replication-factor 1;
       done
       "
 
@@ -169,3 +189,4 @@ services:
 
 volumes:
   alloy-data:
+  alertmanager-data:
