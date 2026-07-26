@@ -1,0 +1,59 @@
+name: Attested documentation release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  build-attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Build documentation artifact
+        run: |
+          pip install -r requirements-docs.txt
+          mkdocs build --clean --strict
+          mkdir -p dist
+          tar -C site -czf dist/conversational-ai-platform-docs.tar.gz .
+          sha256sum dist/conversational-ai-platform-docs.tar.gz > dist/SHA256SUMS
+
+      - name: Generate SPDX SBOM for built documentation
+        uses: anchore/sbom-action@v0
+        with:
+          path: site
+          format: spdx-json
+          output-file: dist/documentation.spdx.json
+
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/conversational-ai-platform-docs.tar.gz
+
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/conversational-ai-platform-docs.tar.gz
+          sbom-path: dist/documentation.spdx.json
+
+      - name: Upload attested release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: attested-documentation-release
+          if-no-files-found: error
+          retention-days: 90
+          path: dist
