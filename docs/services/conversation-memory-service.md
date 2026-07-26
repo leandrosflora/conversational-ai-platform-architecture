@@ -8,7 +8,7 @@ Memória da plataforma: sessão de conversa ativa (Redis, com TTL) e memória du
 
 ## Dados que o serviço possui
 
-- **Sessão ativa** (Redis, chave `session:{conversation_id}`): payload JSON opaco (`data`, definido inteiramente por quem chama) + `updated_at`, com TTL (default `session_ttl_seconds=1800`, o mesmo TTL que o Orchestrator já usava para sua sessão em memória antes desta integração).
+- **Sessão ativa** (Redis, chave `tenant:{tenant_id}:session:{conversation_id}`): payload JSON opaco (`data`, definido inteiramente por quem chama) + `updated_at`, com TTL (default `session_ttl_seconds=1800`, o mesmo TTL que o Orchestrator já usava para sua sessão em memória antes desta integração).
 - **Histórico de mensagens** (MongoDB `conversation_messages`): `tenantId`, `conversationId`, `userId`, `channel`, `provider`, `externalMessageId`, `role`, `content`, `metadata`, `correlationId`, `traceId`, `createdAt`.
 - **Memória de longo prazo** (MongoDB `agent_memory`): um documento por `(tenantId, userId, memoryType)`, com `facts[]`, `sourceConversationId`, `createdAt`/`updatedAt`, `expiresAt` opcional.
 
@@ -45,7 +45,7 @@ Nenhum.
 
 - **Redis**: sessão ativa por conversa, com TTL — é a única fonte de verdade para o estado "quente" da conversa.
 - **MongoDB**: histórico de mensagens (`conversation_messages`) e memória de longo prazo (`agent_memory`), usando o schema/índices já provisionados em `database/conversational-ai-mongodb-init.js` e o usuário de app de privilégio mínimo (`conversational_ai_app`, `readWrite`) — nunca o usuário root.
-- No startup, `ensure_indexes` cria (de forma idempotente) os índices já definidos no script de init do Mongo — cobre o caso de um volume Mongo pré-existente que nunca rodou aquele script.
+- No startup, `ensure_indexes` faz mais que espelhar o script de init do Mongo: ele **migra ativamente** um índice legado global-único `externalMessageId_1` (ainda definido em `database/conversational-ai-mongodb-init.js`, de antes do multi-tenant) para o índice composto tenant-scoped `ux_conversation_messages_tenant_external_message` em `(tenantId, externalMessageId)` — que é a chave de idempotência real hoje (ver Regras de negócio #1). Cobre tanto o caso de um volume Mongo pré-existente que nunca rodou o script de init quanto o de um volume que rodou a versão antiga dele.
 
 ## Regras de negócio
 

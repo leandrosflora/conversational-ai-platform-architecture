@@ -1,14 +1,18 @@
 # core-bancario-mock
 
-Repo: [`leandrosflora/core-bancario-mock`](https://github.com/leandrosflora/core-bancario-mock) · Stack: .NET 8, Minimal API, processo único · Portas locais: `9401`–`9404`
+Repo: [`leandrosflora/core-bancario-mock`](https://github.com/leandrosflora/core-bancario-mock) · Stack: .NET 8, Minimal API, processo único · Portas locais: `9401`–`9405`
 
 ## Responsabilidade principal
 
-Mock, num único processo (`builder.WebHost.UseUrls(...)` escutando em 4 portas simultaneamente), das 4 APIs bancárias externas que o `renegotiation-service` assume existir: consulta de cliente/contratos/dívidas, elegibilidade, contratação/simulação e formalização. Sem persistência — dados de qualquer CPF fora da tabela de cenários abaixo são gerados inline a cada chamada.
+Mock, num único processo (`builder.WebHost.UseUrls(...)` escutando em 5 portas simultaneamente), das APIs bancárias externas que as duas skills do workspace assumem existir: 4 APIs de renegociação consumidas via `renegotiation-service` (consulta de cliente/contratos/dívidas, elegibilidade, contratação/simulação e formalização) e uma 5ª API de cartão de crédito (limite e fatura) consumida diretamente por `tool-service-cartao-credito`. Sem persistência — dados de qualquer CPF fora das tabelas de cenários abaixo são gerados inline a cada chamada.
 
 ## Dados que o serviço possui
 
-Nenhuma persistência real, mas um conjunto fixo de 10 CPFs reservados (`ScenarioFixtures.ByCpf`, dígito repetido 11x — `00000000000` a `99999999999`, mais um CPF de teste manual `12345678911`) resolve para dados determinísticos de cliente/contratos/dívidas/elegibilidade/simulação/formalização, cobrindo os cenários de negócio da renegociação (inelegibilidade, múltiplos contratos, sem dívida em aberto, simulação que expira, documento pendente etc.) — ver `openspec/changes/validate-renegotiation-flow-scenarios/design.md` e `conversational-ai-demo-arch/docs/homologacao/massa-de-teste-clientes.md`. Qualquer CPF fora dessa lista continua com dado gerado inline a cada chamada (`ContractSummary`, `DebtItem` com valores fixos; IDs de simulação/acordo via `Guid.NewGuid()`).
+Nenhuma persistência real, mas dois conjuntos fixos de CPFs reservados:
+- **Renegociação** (`ScenarioFixtures.ByCpf`): 10 CPFs de dígito repetido 11x (`00000000000` a `99999999999`, mais um CPF de teste manual `12345678911`) resolvem para dados determinísticos de cliente/contratos/dívidas/elegibilidade/simulação/formalização, cobrindo os cenários de negócio da renegociação (inelegibilidade, múltiplos contratos, sem dívida em aberto, simulação que expira, documento pendente etc.) — ver `openspec/changes/validate-renegotiation-flow-scenarios/design.md` e `conversational-ai-demo-arch/docs/homologacao/massa-de-teste-clientes.md`.
+- **Cartão de crédito** (`CardFixtures.ByCpf`): 4 CPFs reservados cobrem os cenários da skill de fatura/limite — `11111111111` (fluxo feliz), `22222222222` (limite quase esgotado, fatura fechada), `66666666666` (cliente sem cartão, `HasCard:false`), `77777777777` (fatura zerada). Qualquer outro CPF válido recebe um fallback genérico determinístico (não aleatório) derivado do próprio CPF.
+
+Qualquer CPF fora dessas listas continua com dado gerado inline a cada chamada (`ContractSummary`, `DebtItem` com valores fixos; IDs de simulação/acordo via `Guid.NewGuid()`).
 
 ## APIs publicadas
 
@@ -18,6 +22,7 @@ Nenhuma persistência real, mas um conjunto fixo de 10 CPFs reservados (`Scenari
 | `9402` | EligibilityApi | `GET /contracts/{contractId}/eligibility` |
 | `9403` | ContractingApi | `POST /contracts/{contractId}/simulations` |
 | `9404` | FormalizationApi | `POST /simulations/{simulationId}/confirmations` · `GET /agreements/{agreementId}/document` |
+| `9405` | CardApi | `GET /clients/{cpf}/card/limit` · `GET /clients/{cpf}/card/invoice` — sem autenticação própria (diferente das 4 APIs acima, que recebem tenant/JWT/Idempotency-Key mesmo sem validá-los integralmente); consumida diretamente por `tool-service-cartao-credito`, não pelo `renegotiation-service` |
 
 ## Eventos publicados / consumidos
 

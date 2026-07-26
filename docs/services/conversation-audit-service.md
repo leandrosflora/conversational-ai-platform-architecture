@@ -8,7 +8,7 @@ Audit Service real da plataforma: recebe um evento de jornada por mensagem proce
 
 ## Dados que o serviço possui
 
-Nenhum modelo de domínio próprio além do DTO de entrada (`JourneyAuditEvent`: `ConversationId`, `Intent?`, `Outcome`, `Timestamp`) — todo o estado persistido vive na tabela genérica `ops.audit_events`, já provisionada para servir qualquer tipo de evento de auditoria da plataforma, não só jornadas de conversa.
+Nenhum modelo de domínio próprio além do DTO de entrada (`JourneyAuditEvent`: `ConversationId`, `Intent?`, `Outcome`, `Timestamp`) — todo o estado persistido vive na tabela genérica `ops.audit_events`, já provisionada para servir qualquer tipo de evento de auditoria da plataforma, não só jornadas de conversa. A coluna `idempotency_key` (adicionada depois da tabela original) guarda o header de idempotência do request — é ela que sustenta a regra de dedup (ver "Regras de negócio").
 
 ## APIs publicadas
 
@@ -16,7 +16,9 @@ Nenhum modelo de domínio próprio além do DTO de entrada (`JourneyAuditEvent`:
 |---|---|---|
 | `POST` | `/journey-events` | Recebe `{ conversationId, intent?, outcome, timestamp }` e grava uma linha em `ops.audit_events` antes de responder |
 
-Validação: `400 Bad Request` se `conversationId`, `outcome` ou `timestamp` estiverem ausentes. Sucesso: `202 Accepted` (sem corpo) só depois que a escrita no Postgres é confirmada. `503 Service Unavailable` se o PostgreSQL estiver inacessível — nunca um hang ou um `500` cru.
+Requer `Authorization: Bearer <JWT interno>`, `X-Tenant-Id` batendo com a claim `tenant_id` assinada, e um header `Idempotency-Key`.
+
+Validação: `401` sem JWT válido; `403` se `X-Tenant-Id` não bater com a claim assinada; `400 Bad Request` se `Idempotency-Key`, `conversationId`, `outcome` ou `timestamp` estiverem ausentes. Sucesso: `202 Accepted` (sem corpo) só depois que a escrita no Postgres é confirmada. `503 Service Unavailable` se o PostgreSQL estiver inacessível — nunca um hang ou um `500` cru.
 
 ## Eventos publicados
 
@@ -33,8 +35,9 @@ Nenhuma chamada HTTP a outro serviço — a única dependência é o PostgreSQL 
 ## Persistência & infraestrutura
 
 - **PostgreSQL** (`ops.audit_events`) — único armazenamento do serviço, via `Npgsql` direto (sem ORM). `NpgsqlDataSource` é um singleton com `Timeout=5s`/`CommandTimeout=5s` forçados na connection string, para que uma indisponibilidade real do Postgres vire `503` rápido em vez dos defaults bem mais longos do Npgsql (15s conexão / 30s comando).
-- Mapeamento fixo de campos (`ops.audit_events` é uma tabela de auditoria genérica, não específica de jornada de conversa):
-  - `tenant_id` = tenant seed `demo-bank` (`00000000-0000-0000-0000-000000000001`) — o mesmo tenant fixo usado em todo o workspace, já que não existe multi-tenancy real aqui.
+- Mapeamento de campos (`ops.audit_events` é uma tabela de auditoria genérica, não específica de jornada de conversa):
+  - `tenant_id` = resolvido do request (claim `tenant_id` assinada / `X-Tenant-Id`), não mais um seed fixo.
+  - `idempotency_key` = o header `Idempotency-Key` do request.
   - `actor_type` = `"system"`, `actor_id` = `"conversation-orchestrator"`, `action` = `"conversation.journey_processed"`, `resource_type` = `"conversation"`.
   - `resource_id` = o `conversationId` recebido.
   - `payload` (jsonb) = `{"intent": ..., "outcome": ...}` — `intent` pode ser `null`.
@@ -42,7 +45,7 @@ Nenhuma chamada HTTP a outro serviço — a única dependência é o PostgreSQL 
 
 ## Regras de negócio
 
-1. Não há chave de deduplicação: um retry de rede do lado do Orchestrator (`AddStandardResilienceHandler`, até 2 tentativas) pode gerar duas linhas para o mesmo evento. Aceito para uma trilha de auditoria (naturalmente aditiva) — revisar só se isso virar um problema real de relatório.
+1. **Deduplicado por `(tenant_id, idempotency_key)`**: o insert usa `ON CONFLICT (tenant_id, idempotency_key) DO NOTHING`, sustentado por um índice único migrado (`ux_audit_events_tenant_idempotency_key`). Um retry de rede do lado do Orchestrator com a mesma `Idempotency-Key` não gera uma segunda linha — diferente de uma versão anterior deste documento, que descrevia a trilha de auditoria como propositalmente não deduplicada.
 2. `created_at` é sempre o timestamp que o chamador informou, nunca recalculado pelo servidor — preserva quando o evento realmente aconteceu do lado do Orchestrator.
 3. Indisponibilidade do Postgres nunca vira um `500` genérico nem trava a requisição — sempre `503`, dentro do timeout configurado (5s).
 
