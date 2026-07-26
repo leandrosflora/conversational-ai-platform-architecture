@@ -9,8 +9,9 @@ Este documento descreve controles existentes no código. A arquitetura-alvo perm
 | WhatsApp → BFF | verify token no handshake e HMAC-SHA256 sobre o corpo original |
 | Serviço → serviço | JWT HS256 curto com `iss`, `sub`, `aud`, `iat`, `exp`, `jti` e `tenant_id` |
 | Tenant → serviço | UUID canônico presente simultaneamente em claim assinada e `X-Tenant-Id` |
-| Agent Runtime → Tool Service | JWT `tool_execution` com conversa, mensagem, estágio, versão e evidência de confirmação |
-| Tool Service → Renegotiation Service | JWT `governed_tool` com tool autorizada e `policy_id` ligado à `Idempotency-Key` |
+| Agent Runtime → Tool Service | JWT `tool_execution` com conversa, mensagem, estágio, versão e evidência de confirmação (skill cartão de crédito: sem `journey_stage`/estágio, já que a policy ali é só por identidade do chamador) |
+| Tool Service (renegociação) → Renegotiation Service | JWT `governed_tool` com tool autorizada e `policy_id` ligado à `Idempotency-Key` |
+| Tool Service (cartão de crédito) → Core Bancário Mock (Card API) | **Sem autenticação** — `core-bancario-mock` não valida token próprio nessa API; único hop síncrono da plataforma sem JWT em nenhuma ponta |
 | Entrada → negócio | Kafka confirmado antes do ACK; Inbox e estado transacionais |
 | Side effects | Outbox durável, replay at-least-once e deduplicação no destino |
 | Dados | chaves, queries e índices tenant-scoped |
@@ -54,11 +55,11 @@ O Agent Runtime emite token `tool_execution` contendo:
 - `journey_version`;
 - `confirmation_message_id`, quando uma confirmação explícita foi reconhecida deterministicamente.
 
-O Tool Service aceita apenas o caller `agent-runtime-renegotiation` e estabelece o contexto a partir dessas claims.
+Cada Tool Service aceita apenas o caller correspondente e estabelece o contexto a partir dessas claims: `tool-service-renegotiation` só aceita `agent-runtime-renegotiation`, `tool-service-cartao-credito` só aceita `agent-runtime-fatura-cartao`.
 
 ### 3.3 Prova de policy para o domínio
 
-Depois de autorizar a tool, o Tool Service emite token `governed_tool` com:
+Depois de autorizar a tool, `tool-service-renegotiation` emite um segundo token `governed_tool` com:
 
 - `tool_name`;
 - o mesmo contexto da jornada;
@@ -73,6 +74,8 @@ O Renegotiation Service exige:
 - para confirmação, `confirmation_message_id == message_id`.
 
 Assim, prompt ou tool call do LLM não são suficientes para autorizar uma operação financeira.
+
+**A skill de cartão de crédito não tem esse segundo salto.** `tool-service-cartao-credito` chama `core-bancario-mock` (Card API) diretamente, sem emitir nenhum token — não há um serviço de domínio intermediário para revalidar a decisão, porque as duas tools daquela skill são consultas de leitura sem simulação/confirmação a proteger. A defesa em profundidade de "dois serviços concordam antes de agir" que existe na renegociação simplesmente não se aplica aqui; a única barreira é a policy de identidade do chamador (§7).
 
 ### Limitação de identidade
 
@@ -150,7 +153,7 @@ Isso evita que retry em outro tópico avance a máquina de estados fora de ordem
 
 ## 7. Policy de tools
 
-O Tool Service usa allowlist por estágio.
+`tool-service-renegotiation` usa allowlist por estágio.
 
 Controles críticos:
 
@@ -161,6 +164,8 @@ Controles críticos:
 - o Renegotiation Service valida a mesma decisão novamente.
 
 A policy é código determinístico, não prompt.
+
+`tool-service-cartao-credito` usa uma policy mais simples, por desenho: só checa a identidade do serviço chamador (`caller_service == agent-runtime-fatura-cartao`), sem allowlist de estágio nem segundo serviço revalidando — suas duas tools são consultas de leitura, sem operação a proteger por estágio de jornada.
 
 ## 8. Idempotência da simulação
 
@@ -177,7 +182,7 @@ O comportamento fail-closed existe porque o Core mock ainda não valida a chave.
 
 Implementado:
 
-- eventos de tools não incluem argumentos;
+- eventos de tools (`tool.executed`, publicado por `tool-service-renegotiation` e `tool-service-cartao-credito`) não incluem argumentos — nem CPF, nem nenhum outro parâmetro de tool, em nenhuma das duas skills;
 - métricas não usam tenant, conversation ID, CPF ou conteúdo como label;
 - reason de handoff é normalizado para vocabulário fechado;
 - logs operacionais usam identificadores e trace, não o texto completo.
@@ -222,7 +227,7 @@ Alertas ainda precisam ser provisionados; o código expõe séries, mas não ins
 
 ## 12. Lacunas críticas restantes
 
-1. **Core Bancário Mock:** repositório inacessível; não valida JWT, policy proof ou idempotência.
+1. **Core Bancário Mock:** não valida JWT, policy proof ou idempotência nas 4 APIs de renegociação; a Card API (`:9405`, usada pela skill de cartão de crédito) não tem autenticação própria de forma alguma — `tool-service-cartao-credito` a chama sem nenhum token, diferente de todo outro hop síncrono da plataforma.
 2. **Identidade:** HS256 compartilhado, sem rotação/JWKS.
 3. **Handoff:** não integra plataforma humana real.
 4. **Infraestrutura:** Kafka/OpenSearch/rede locais sem controles de produção.
