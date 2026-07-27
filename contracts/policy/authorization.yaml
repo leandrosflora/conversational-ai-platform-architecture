@@ -23,6 +23,36 @@ rules:
     methods: [POST]
     paths: [/process]
     idempotency: none
+  - id: orchestrator-to-memory
+    caller: conversation-orchestrator
+    audience: conversation-memory-service
+    methods: [GET, PUT, DELETE, POST]
+    paths: [/sessions/**, /conversations/**]
+    idempotency: required_for_post
+  - id: renegotiation-agent-to-memory
+    caller: agent-runtime-renegotiation
+    audience: conversation-memory-service
+    methods: [GET]
+    paths: [/conversations/**, /users/**]
+    idempotency: none
+  - id: renegotiation-agent-to-knowledge
+    caller: agent-runtime-renegotiation
+    audience: knowledge-service
+    methods: [GET]
+    paths: [/search]
+    idempotency: none
+  - id: orchestrator-to-audit
+    caller: conversation-orchestrator
+    audience: conversation-audit-service
+    methods: [POST]
+    paths: [/journey-events]
+    idempotency: required
+  - id: orchestrator-to-handoff
+    caller: conversation-orchestrator
+    audience: conversation-handoff-service
+    methods: [POST]
+    paths: [/handoffs]
+    idempotency: required
   - id: renegotiation-tool-to-domain
     caller: tool-service-renegotiation
     audience: renegotiation-service
