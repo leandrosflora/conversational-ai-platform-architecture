@@ -18,7 +18,7 @@ Arquitetura de referência executável para plataformas corporativas de IA conve
 
     WhatsApp Cloud API, OpenAI, Core Bancário Mock autenticado, 12 serviços, cinco datastores e observabilidade local executável. Os domínios de renegociação e cartão operam com massas sintéticas de teste.
 
-    [Abrir C4 de contexto atual](architecture/C4/c4-context.puml)
+    [Visualizar C4 de contexto atual](architecture/c4-context-current.md)
 
 -   :material-office-building-cog-outline:{ .lg .middle } **Arquitetura-alvo corporativa**
 
@@ -26,7 +26,7 @@ Arquitetura de referência executável para plataformas corporativas de IA conve
 
     Salesforce, Data Lake, automação de campanha, atendimento humano integrado, Model Gateway, PDP, infraestrutura gerenciada e APIs reais do Core Bancário para contratos, débitos, elegibilidade, simulações, formalização, limite e fatura.
 
-    [Abrir C4 de contexto alvo](architecture/C4/c4-context-target.puml)
+    [Visualizar C4 de contexto alvo](architecture/c4-context-target.md)
 
 </div>
 
