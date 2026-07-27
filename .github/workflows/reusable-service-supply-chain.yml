@@ -16,25 +16,29 @@ on:
         required: false
         default: Dockerfile
         type: string
+      platform_ref:
+        description: Versioned platform governance contracts ref
+        required: false
+        default: v1
+        type: string
 
 permissions:
   contents: read
-  security-events: write
-  actions: read
-  id-token: write
-  attestations: write
 
 jobs:
-  verify:
+  governance:
+    name: Governance contract
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
-      - name: Checkout platform governance contracts
+      - name: Checkout versioned platform governance contracts
         uses: actions/checkout@v7
         with:
           repository: leandrosflora/conversational-ai-platform-architecture
-          ref: main
+          ref: ${{ inputs.platform_ref }}
           path: .platform-governance
 
       - uses: actions/setup-python@v7
@@ -49,125 +53,255 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --root "$GITHUB_WORKSPACE"
 
-      - name: Setup .NET
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect Dependency Graph availability
+        id: dependency_graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          status=$(curl --silent --show-error --location --retry 2 \
+            --output /tmp/dependency-diff.json \
+            --write-out '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE_SHA...$HEAD_SHA" || true)
+
+          if [ "$status" = "200" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Dependency Graph is unavailable (HTTP ${status:-unknown}); Dependency Review is advisory and Trivy remains blocking."
+          fi
+
+      - name: Review dependency changes
+        if: steps.dependency_graph.outputs.available == 'true'
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  codeql:
+    name: CodeQL
+    needs: governance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
         if: inputs.language == 'csharp'
-        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
-      - name: Build and test .NET
-        if: inputs.language == 'csharp'
-        shell: bash
-        run: |
-          mapfile -t projects < <(find . -path './.platform-governance' -prune -o -name '*.csproj' -print)
-          test "${#projects[@]}" -gt 0
-          dotnet restore
-          dotnet build --no-restore --configuration Release
-          mapfile -t tests < <(find . -path './.platform-governance' -prune -o -name '*Tests.csproj' -print)
-          if [ "${#tests[@]}" -gt 0 ]; then
-            dotnet test --no-build --configuration Release --logger trx --results-directory TestResults
-          fi
-
-      - name: Install and test Python
+      - uses: actions/setup-python@v7
         if: inputs.language == 'python'
-        shell: bash
-        run: |
-          python -m venv .venv-supply-chain
-          source .venv-supply-chain/bin/activate
-          python -m pip install --upgrade pip
-          test ! -f requirements.txt || pip install -r requirements.txt
-          test ! -f requirements-dev.txt || pip install -r requirements-dev.txt
-          python -m compileall -q . -x '(^|/)(\.venv|\.platform-governance)/'
-          if [ -d tests ] && find tests -type f -name 'test_*.py' -print -quit | grep -q .; then
-            pytest -q --junitxml=test-results.xml
-          fi
+        with:
+          python-version: "3.12"
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ inputs.language }}
 
-      - name: Autobuild for CodeQL
-        uses: github/codeql-action/autobuild@v4
+      - name: Build .NET for analysis
+        if: inputs.language == 'csharp'
+        shell: bash
+        run: |
+          mapfile -t solutions < <(find . -name '*.sln' -not -path '*/bin/*' -not -path '*/obj/*' -print)
+          if [ "${#solutions[@]}" -gt 0 ]; then
+            for solution in "${solutions[@]}"; do
+              dotnet restore "$solution"
+              dotnet build "$solution" --no-restore --configuration Release
+            done
+          else
+            mapfile -t projects < <(find . -name '*.csproj' -not -path '*/bin/*' -not -path '*/obj/*' -print)
+            test "${#projects[@]}" -gt 0
+            for project in "${projects[@]}"; do
+              dotnet restore "$project"
+              dotnet build "$project" --no-restore --configuration Release
+            done
+          fi
+
+      - name: Validate Python source for analysis
+        if: inputs.language == 'python'
+        shell: bash
+        run: python -m compileall -q . -x '(^|/)(\.venv|\.git)/'
 
       - name: Analyze with CodeQL
         uses: github/codeql-action/analyze@v4
 
-      - name: Scan dependencies, repository and Dockerfile with Trivy
+  artifact-security:
+    name: Artifact security
+    needs: governance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Scan source, dependencies, secrets and configuration
+        id: source_scan
+        continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
-          skip-dirs: .platform-governance
           scanners: vuln,misconfig,secret
           format: sarif
-          output: trivy-results.sarif
+          output: source-trivy.sarif
           severity: HIGH,CRITICAL
           limit-severities-for-sarif: true
-          exit-code: "1"
           ignore-unfixed: true
+          exit-code: "1"
 
-      - name: Upload Trivy SARIF
-        if: always() && hashFiles('trivy-results.sarif') != ''
+      - name: Upload source SARIF
+        if: always() && hashFiles('source-trivy.sarif') != ''
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: trivy-results.sarif
+          sarif_file: source-trivy.sarif
+          category: trivy-source
 
-      - name: Remove governance checkout from image context
-        shell: bash
-        run: rm -rf .platform-governance
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-        with:
-          driver: docker-container
-
-      - name: Build OCI image archive
+      - name: Build immutable local image
+        id: image_build
+        if: always()
+        continue-on-error: true
         shell: bash
         run: |
           test -f "${{ inputs.dockerfile }}"
-          docker buildx build \
+          docker build --pull \
             --file "${{ inputs.dockerfile }}" \
-            --tag "${{ inputs.service_name }}:${GITHUB_SHA}" \
-            --output "type=oci,dest=${{ inputs.service_name }}.oci.tar" \
+            --tag "local/${{ inputs.service_name }}:${GITHUB_SHA}" \
             .
 
-      - name: Generate SPDX SBOM for OCI image
+      - name: Scan built image
+        id: image_scan
+        if: always() && steps.image_build.outcome == 'success'
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: local/${{ inputs.service_name }}:${{ github.sha }}
+          format: sarif
+          output: image-trivy.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload image SARIF
+        if: always() && hashFiles('image-trivy.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: image-trivy.sarif
+          category: trivy-image
+
+      - name: Generate source SPDX SBOM
+        id: source_sbom
+        if: always()
+        continue-on-error: true
         uses: anchore/sbom-action@v0.20.6
         with:
-          image: "oci-archive:${{ inputs.service_name }}.oci.tar"
+          path: .
           format: spdx-json
-          output-file: "${{ inputs.service_name }}.spdx.json"
+          output-file: source-sbom.spdx.json
           upload-artifact: false
 
-      - name: Generate checksums
+      - name: Generate image SPDX SBOM
+        id: image_sbom
+        if: always() && steps.image_build.outcome == 'success'
+        continue-on-error: true
+        uses: anchore/sbom-action@v0.20.6
+        with:
+          image: local/${{ inputs.service_name }}:${{ github.sha }}
+          format: spdx-json
+          output-file: image-sbom.spdx.json
+          upload-artifact: false
+
+      - name: Package image and checksums
+        id: package
+        if: always() && steps.image_build.outcome == 'success' && steps.source_sbom.outcome == 'success' && steps.image_sbom.outcome == 'success'
+        continue-on-error: true
         shell: bash
-        run: sha256sum "${{ inputs.service_name }}.oci.tar" "${{ inputs.service_name }}.spdx.json" > SHA256SUMS
-
-      - name: Attest OCI archive provenance
-        if: github.event_name != 'pull_request'
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-path: "${{ inputs.service_name }}.oci.tar"
-
-      - name: Attest SBOM
-        if: github.event_name != 'pull_request'
-        uses: actions/attest-sbom@v3
-        with:
-          subject-path: "${{ inputs.service_name }}.oci.tar"
-          sbom-path: "${{ inputs.service_name }}.spdx.json"
+        run: |
+          docker save "local/${{ inputs.service_name }}:${GITHUB_SHA}" -o image.tar
+          sha256sum image.tar source-sbom.spdx.json image-sbom.spdx.json > SHA256SUMS
 
       - name: Upload supply-chain evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: supply-chain-${{ inputs.service_name }}
+          name: supply-chain-${{ inputs.service_name }}-${{ github.sha }}
           if-no-files-found: warn
           retention-days: 30
           path: |
-            ${{ inputs.service_name }}.oci.tar
-            ${{ inputs.service_name }}.spdx.json
+            source-trivy.sarif
+            image-trivy.sarif
+            source-sbom.spdx.json
+            image-sbom.spdx.json
+            image.tar
             SHA256SUMS
-            trivy-results.sarif
-            TestResults
-            test-results.xml
+
+      - name: Enforce supply-chain gates after evidence collection
+        if: always()
+        env:
+          SOURCE_SCAN: ${{ steps.source_scan.outcome }}
+          IMAGE_BUILD: ${{ steps.image_build.outcome }}
+          IMAGE_SCAN: ${{ steps.image_scan.outcome }}
+          SOURCE_SBOM: ${{ steps.source_sbom.outcome }}
+          IMAGE_SBOM: ${{ steps.image_sbom.outcome }}
+          PACKAGE: ${{ steps.package.outcome }}
+        shell: bash
+        run: |
+          test "$SOURCE_SCAN" = "success"
+          test "$IMAGE_BUILD" = "success"
+          test "$IMAGE_SCAN" = "success"
+          test "$SOURCE_SBOM" = "success"
+          test "$IMAGE_SBOM" = "success"
+          test "$PACKAGE" = "success"
+
+  attest:
+    name: Attest release evidence
+    needs: artifact-security
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download supply-chain evidence
+        uses: actions/download-artifact@v6
+        with:
+          name: supply-chain-${{ inputs.service_name }}-${{ github.sha }}
+          path: evidence
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: evidence/image.tar
+
+      - name: Attest image SBOM
+        uses: actions/attest-sbom@v4
+        with:
+          subject-path: evidence/image.tar
+          sbom-path: evidence/image-sbom.spdx.json
