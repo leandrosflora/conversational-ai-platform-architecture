@@ -113,14 +113,24 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+      - name: Remove governance checkout from image context
+        shell: bash
+        run: rm -rf .platform-governance
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          driver: docker-container
+
       - name: Build OCI image archive
         shell: bash
         run: |
           test -f "${{ inputs.dockerfile }}"
-          docker build \
-            -f "${{ inputs.dockerfile }}" \
-            -t "${{ inputs.service_name }}:${GITHUB_SHA}" \
-            --output "type=oci,dest=${{ inputs.service_name }}.oci.tar" .
+          docker buildx build \
+            --file "${{ inputs.dockerfile }}" \
+            --tag "${{ inputs.service_name }}:${GITHUB_SHA}" \
+            --output "type=oci,dest=${{ inputs.service_name }}.oci.tar" \
+            .
 
       - name: Generate SPDX SBOM for OCI image
         uses: anchore/sbom-action@v0.20.6
