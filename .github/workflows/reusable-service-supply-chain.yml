@@ -1,0 +1,157 @@
+name: Reusable service supply chain
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: Canonical service name from the platform release manifest
+        required: true
+        type: string
+      language:
+        description: CodeQL language and build family
+        required: true
+        type: string
+      dockerfile:
+        description: Dockerfile path
+        required: false
+        default: Dockerfile
+        type: string
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Checkout platform governance contracts
+        uses: actions/checkout@v7
+        with:
+          repository: leandrosflora/conversational-ai-platform-architecture
+          ref: main
+          path: .platform-governance
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Validate service membership and governance contract
+        run: |
+          python -m pip install --disable-pip-version-check pyyaml
+          python .platform-governance/scripts/validate-service-conformance.py \
+            --service "${{ inputs.service_name }}" \
+            --repository "$GITHUB_REPOSITORY" \
+            --root "$GITHUB_WORKSPACE"
+
+      - name: Setup .NET
+        if: inputs.language == 'csharp'
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build and test .NET
+        if: inputs.language == 'csharp'
+        shell: bash
+        run: |
+          mapfile -t projects < <(find . -path './.platform-governance' -prune -o -name '*.csproj' -print)
+          test "${#projects[@]}" -gt 0
+          dotnet restore
+          dotnet build --no-restore --configuration Release
+          mapfile -t tests < <(find . -path './.platform-governance' -prune -o -name '*Tests.csproj' -print)
+          if [ "${#tests[@]}" -gt 0 ]; then
+            dotnet test --no-build --configuration Release --logger trx --results-directory TestResults
+          fi
+
+      - name: Install and test Python
+        if: inputs.language == 'python'
+        shell: bash
+        run: |
+          python -m venv .venv-supply-chain
+          source .venv-supply-chain/bin/activate
+          python -m pip install --upgrade pip
+          test ! -f requirements.txt || pip install -r requirements.txt
+          test ! -f requirements-dev.txt || pip install -r requirements-dev.txt
+          python -m compileall -q . -x '(^|/)(\.venv|\.platform-governance)/'
+          if [ -d tests ] && find tests -type f -name 'test_*.py' -print -quit | grep -q .; then
+            pytest -q --junitxml=test-results.xml
+          fi
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ inputs.language }}
+
+      - name: Autobuild for CodeQL
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@v4
+
+      - name: Scan repository and Dockerfile with Trivy
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Build OCI image archive
+        shell: bash
+        run: |
+          test -f "${{ inputs.dockerfile }}"
+          docker build \
+            -f "${{ inputs.dockerfile }}" \
+            -t "${{ inputs.service_name }}:${GITHUB_SHA}" \
+            --output "type=oci,dest=${{ inputs.service_name }}.oci.tar" .
+
+      - name: Generate SPDX SBOM for OCI image
+        uses: anchore/sbom-action@v0.20.6
+        with:
+          image: "${{ inputs.service_name }}.oci.tar"
+          format: spdx-json
+          output-file: "${{ inputs.service_name }}.spdx.json"
+          upload-artifact: false
+
+      - name: Generate checksums
+        shell: bash
+        run: sha256sum "${{ inputs.service_name }}.oci.tar" "${{ inputs.service_name }}.spdx.json" > SHA256SUMS
+
+      - name: Attest OCI archive provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: "${{ inputs.service_name }}.oci.tar"
+
+      - name: Attest SBOM
+        uses: actions/attest-sbom@v3
+        with:
+          subject-path: "${{ inputs.service_name }}.oci.tar"
+          sbom-path: "${{ inputs.service_name }}.spdx.json"
+
+      - name: Upload supply-chain evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: supply-chain-${{ inputs.service_name }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ inputs.service_name }}.oci.tar
+            ${{ inputs.service_name }}.spdx.json
+            SHA256SUMS
+            TestResults
+            test-results.xml
