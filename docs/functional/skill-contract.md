@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Uma skill é uma unidade funcional versionada, com owner, capacidades, estado, tools, nível de garantia e indicadores. O catálogo executável está em [`contracts/functional/skills.yaml`](https://github.com/leandrosflora/conversational-ai-platform-architecture/blob/main/contracts/functional/skills.yaml).
+Uma skill é uma unidade funcional versionada, com owner, capacidades, estado, tools, nível de garantia e indicadores. O catálogo executável está em `contracts/functional/skills.yaml`.
 
 ## Campos obrigatórios
 
