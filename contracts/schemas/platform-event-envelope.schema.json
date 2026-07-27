@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.leandroflora.dev/contracts/platform-event-envelope.schema.json",
+  "title": "Platform event envelope",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["eventId", "eventType", "occurredAt", "tenantId", "source", "data"],
+  "properties": {
+    "eventId": {"type": "string", "minLength": 8},
+    "eventType": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+    "occurredAt": {"type": "string", "format": "date-time"},
+    "tenantId": {"type": "string", "format": "uuid"},
+    "source": {"type": "string", "minLength": 1},
+    "traceparent": {"type": "string"},
+    "correlationId": {"type": "string"},
+    "schemaVersion": {"type": "integer", "minimum": 1},
+    "data": {"type": "object"}
+  }
+}

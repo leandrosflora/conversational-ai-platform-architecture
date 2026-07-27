@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.leandroflora.dev/contracts/internal-service-token.schema.json",
+  "title": "Internal service token claims",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["iss", "sub", "aud", "iat", "exp", "jti", "tenant_id"],
+  "properties": {
+    "iss": {"const": "conversational-ai-platform"},
+    "sub": {"type": "string", "minLength": 1},
+    "aud": {"type": ["string", "array"]},
+    "iat": {"type": "integer"},
+    "exp": {"type": "integer"},
+    "jti": {"type": "string", "minLength": 8},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "policy_id": {"type": "string"},
+    "tool_name": {"type": "string"},
+    "conversation_id": {"type": "string"},
+    "message_id": {"type": "string"},
+    "journey_version": {"type": "integer", "minimum": 0}
+  }
+}

@@ -20,13 +20,14 @@ jobs:
           python-version: "3.12"
 
       - name: Install contract dependencies
-        run: python -m pip install --disable-pip-version-check pyyaml
+        run: python -m pip install --disable-pip-version-check pyyaml check-jsonschema
 
       - name: Validate Python and shell automation
         run: |
           python -m py_compile \
             scripts/checkout-release.py \
             scripts/validate-executable-contracts.py \
+            scripts/validate-service-conformance.py \
             scripts/run-evals.py \
             scripts/validate-security-control-plane.py \
             security/control-plane/app.py
@@ -34,6 +35,11 @@ jobs:
           bash -n scripts/dr-invariant-drill.sh
           bash -n scripts/chaos-invariant-drill.sh
           node --check tests/load/journey.js
+
+      - name: Validate JSON Schema contracts
+        run: |
+          check-jsonschema --check-metaschema contracts/schemas/internal-service-token.schema.json
+          check-jsonschema --check-metaschema contracts/schemas/platform-event-envelope.schema.json
 
       - name: Validate executable contracts and release manifest
         run: python scripts/validate-executable-contracts.py
@@ -50,6 +56,13 @@ jobs:
             -v "$PWD/security/opa:/policy:ro" \
             openpolicyagent/opa:0.68.0-static \
             test /policy/platform.rego /policy/platform_test.rego --verbose
+
+      - name: Validate changed workflow syntax
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            rhysd/actionlint:1.7.7 \
+            .github/workflows/p8-governance.yml \
+            .github/workflows/reusable-service-supply-chain.yml
 
       - name: Upload eval evidence
         if: always()

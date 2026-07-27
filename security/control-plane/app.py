@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -40,6 +41,34 @@ ALLOWED_PAIRS: dict[str, set[str]] = {
     "renegotiation-service": {"core-bancario-mock"},
     "tool-service-cartao-credito": {"core-bancario-mock"},
 }
+
+
+def load_bootstrap_secrets() -> dict[str, str]:
+    raw = os.getenv("WORKLOAD_BOOTSTRAP_SECRETS_JSON", "{}")
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("WORKLOAD_BOOTSTRAP_SECRETS_JSON must be valid JSON") from exc
+    if not isinstance(value, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in value.items()):
+        raise RuntimeError("WORKLOAD_BOOTSTRAP_SECRETS_JSON must map workload names to strings")
+    return value
+
+
+BOOTSTRAP_SECRETS = load_bootstrap_secrets()
+
+
+def valid_bootstrap_secret(value: str | None) -> bool:
+    return bool(value) and len(value.encode()) >= 32
+
+
+def bootstrap_configuration_errors() -> list[str]:
+    errors: list[str] = []
+    for workload in ALLOWED_PAIRS:
+        if not valid_bootstrap_secret(BOOTSTRAP_SECRETS.get(workload)):
+            errors.append(f"bootstrap_secret_missing_or_short:{workload}")
+    unexpected = sorted(set(BOOTSTRAP_SECRETS) - set(ALLOWED_PAIRS))
+    errors.extend(f"bootstrap_secret_unknown_workload:{name}" for name in unexpected)
+    return errors
 
 
 def b64url_int(value: int) -> str:
@@ -89,7 +118,7 @@ class AuthorizationRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
-app = FastAPI(title="workload-identity-and-policy-control-plane", version="1.0.0")
+app = FastAPI(title="workload-identity-and-policy-control-plane", version="1.1.0")
 
 
 @app.get("/health/live", include_in_schema=False)
@@ -98,14 +127,17 @@ def live() -> dict[str, str]:
 
 
 @app.get("/health/ready", include_in_schema=False)
-async def ready() -> dict[str, str]:
+async def ready() -> dict[str, Any]:
+    configuration_errors = bootstrap_configuration_errors()
+    if configuration_errors:
+        raise HTTPException(status_code=503, detail={"reason": "bootstrap_configuration_invalid", "errors": configuration_errors})
     try:
         async with httpx.AsyncClient(timeout=2) as client:
             response = await client.get(OPA_URL.rsplit("/v1/", 1)[0] + "/health")
             response.raise_for_status()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"opa_unavailable:{type(exc).__name__}") from exc
-    return {"status": "ready"}
+    return {"status": "ready", "bootstrapWorkloads": len(BOOTSTRAP_SECRETS)}
 
 
 @app.get("/.well-known/openid-configuration")
@@ -117,6 +149,7 @@ def discovery() -> dict[str, Any]:
         "id_token_signing_alg_values_supported": ["RS256"],
         "scopes_supported": ["workload"],
         "grant_types_supported": ["client_credentials"],
+        "token_endpoint_auth_methods_supported": ["x-workload-bootstrap-token"],
     }
 
 
@@ -138,7 +171,16 @@ def jwks() -> dict[str, Any]:
 
 
 @app.post("/token")
-def token(payload: TokenRequest) -> dict[str, Any]:
+def token(
+    payload: TokenRequest,
+    x_workload_bootstrap_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    expected_secret = BOOTSTRAP_SECRETS.get(payload.client_id)
+    if not valid_bootstrap_secret(expected_secret) or not x_workload_bootstrap_token:
+        raise HTTPException(status_code=401, detail="workload_bootstrap_authentication_required")
+    if not hmac.compare_digest(expected_secret, x_workload_bootstrap_token):
+        raise HTTPException(status_code=401, detail="workload_bootstrap_authentication_failed")
+
     allowed = ALLOWED_PAIRS.get(payload.client_id, set())
     if payload.audience not in allowed:
         raise HTTPException(status_code=403, detail="workload_pair_not_allowed")
