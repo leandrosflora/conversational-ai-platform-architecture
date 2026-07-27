@@ -1,0 +1,67 @@
+schemaVersion: 1
+ports:
+  - id: customer-identification
+    owner: customer-identity
+    consumer: renegotiation-service
+    capability: customer_identity
+    operations:
+      - resolveCustomer
+    mockProvider: core-bancario-mock
+    productionProvider: customer-profile-api
+    mutability: read_only
+  - id: debt-portfolio
+    owner: credit-recovery
+    consumer: renegotiation-service
+    capability: debt_consultation
+    operations:
+      - listContracts
+      - getOutstandingDebt
+    mockProvider: core-bancario-mock
+    productionProvider: debt-platform-api
+    mutability: read_only
+  - id: eligibility
+    owner: credit-policy
+    consumer: renegotiation-service
+    capability: eligibility_assessment
+    operations:
+      - assessEligibility
+    mockProvider: core-bancario-mock
+    productionProvider: credit-policy-api
+    mutability: read_only
+  - id: negotiation-simulation
+    owner: credit-recovery
+    consumer: renegotiation-service
+    capability: offer_simulation
+    operations:
+      - simulateOffer
+    mockProvider: core-bancario-mock
+    productionProvider: negotiation-engine-api
+    mutability: transactional
+    idempotency: required
+  - id: agreement-formalization
+    owner: contracting
+    consumer: renegotiation-service
+    capability: agreement_formalization
+    operations:
+      - confirmAgreement
+      - retrieveDocument
+    mockProvider: core-bancario-mock
+    productionProvider: contracting-api
+    mutability: transactional
+    idempotency: required
+    reconciliation: required
+  - id: card-servicing
+    owner: card-products
+    consumer: tool-service-cartao-credito
+    capability: card_information
+    operations:
+      - getCardLimit
+      - getCurrentInvoice
+    mockProvider: core-bancario-mock
+    productionProvider: card-platform-api
+    mutability: read_only
+rules:
+  - agents_must_not_call_core_directly
+  - domain_services_own_financial_validation
+  - adapters_translate_external_payloads_to_canonical_models
+  - provider_selection_is_environment_controlled
