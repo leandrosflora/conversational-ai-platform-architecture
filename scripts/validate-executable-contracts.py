@@ -126,7 +126,11 @@ def validate_asyncapi(errors: list[str]) -> None:
     if addresses != EXPECTED_TOPICS:
         errors.append(f"AsyncAPI topics differ: missing={sorted(EXPECTED_TOPICS - addresses)}, extra={sorted(addresses - EXPECTED_TOPICS)}")
     compose_text = COMPOSE_OVERRIDE.read_text(encoding="utf-8")
-    compose_topics = set(re.findall(r"(?:^|\s)(channel\.[\w.]+|intent\.detected|conversation\.state_changed|agent\.events|tool\.executed)(?:\s|$)", compose_text))
+    compose_topics = {
+        topic
+        for topic in EXPECTED_TOPICS
+        if re.search(rf"(?<![A-Za-z0-9_.-]){re.escape(topic)}(?![A-Za-z0-9_.-])", compose_text)
+    }
     if not EXPECTED_TOPICS.issubset(compose_topics):
         errors.append(f"Compose kafka-init lacks topics: {sorted(EXPECTED_TOPICS - compose_topics)}")
 
