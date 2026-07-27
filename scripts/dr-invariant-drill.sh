@@ -67,7 +67,7 @@ BACKUP_COMPLETED_AT=$(date +%s)
 DESTRUCTION_COMPLETED_AT=$(date +%s)
 
 ALLOW_DESTRUCTIVE_RESTORE=true scripts/restore-local.sh "$BACKUP_DIR"
-RESTORE_COMPLETED_AT=$(date +%s)
+DATA_RESTORE_COMPLETED_AT=$(date +%s)
 
 POSTGRES_AFTER=$("${COMPOSE[@]}" exec -T postgres psql -U postgres -d conversational_ai -Atc \
   "select count(*) from ops.dr_sentinel where run_id='$RUN_ID' and payload='persist-me';")
@@ -77,15 +77,17 @@ MONGO_AFTER=$("${COMPOSE[@]}" exec -T mongodb mongosh --quiet --username admin -
 test "$POSTGRES_AFTER" = "1"
 test "$MONGO_AFTER" = "1"
 
-# Kafka and OpenSearch are explicitly reconstruction-based in this workspace.
+# Kafka and OpenSearch are reconstruction-based. Recovery is not complete until both are usable.
 "${COMPOSE[@]}" up -d --wait opensearch kafka kafka-init
 TOPIC_COUNT=$("${COMPOSE[@]}" exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list \
   | grep -Ec '^(channel\.|intent\.detected$|conversation\.state_changed$|agent\.events$|tool\.executed$)')
 test "$TOPIC_COUNT" -ge 9
 curl --fail --silent --show-error http://localhost:9200/_cluster/health >"$EVIDENCE_DIR/opensearch-cluster-health.json"
 
-FINISHED_AT=$(date +%s)
-RTO_SECONDS=$((RESTORE_COMPLETED_AT - DESTRUCTION_COMPLETED_AT))
+RECOVERY_COMPLETED_AT=$(date +%s)
+FINISHED_AT=$RECOVERY_COMPLETED_AT
+DATA_RESTORE_SECONDS=$((DATA_RESTORE_COMPLETED_AT - DESTRUCTION_COMPLETED_AT))
+RTO_SECONDS=$((RECOVERY_COMPLETED_AT - DESTRUCTION_COMPLETED_AT))
 TOTAL_SECONDS=$((FINISHED_AT - STARTED_AT))
 cat >"$EVIDENCE_DIR/dr-result.json" <<JSON
 {
@@ -96,7 +98,9 @@ cat >"$EVIDENCE_DIR/dr-result.json" <<JSON
   "mongoSentinelAfter": $MONGO_AFTER,
   "kafkaTopicCountAfterReconstruction": $TOPIC_COUNT,
   "backupDurationSeconds": $((BACKUP_COMPLETED_AT - STARTED_AT)),
+  "dataRestoreSeconds": $DATA_RESTORE_SECONDS,
   "rtoSeconds": $RTO_SECONDS,
+  "rtoIncludes": ["postgres-verified", "mongodb-verified", "kafka-reconstructed", "opensearch-healthy"],
   "totalDrillSeconds": $TOTAL_SECONDS,
   "rpo": "zero-for-seeded-sentinels",
   "result": "passed"
@@ -104,4 +108,4 @@ cat >"$EVIDENCE_DIR/dr-result.json" <<JSON
 JSON
 
 "${COMPOSE[@]}" ps >"$EVIDENCE_DIR/compose-final.txt"
-echo "OK: DR invariants restored; RTO=${RTO_SECONDS}s; evidence=$EVIDENCE_DIR"
+echo "OK: complete recovery validated; data-restore=${DATA_RESTORE_SECONDS}s; RTO=${RTO_SECONDS}s; evidence=$EVIDENCE_DIR"
