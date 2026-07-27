@@ -57,10 +57,12 @@ jobs:
             openpolicyagent/opa:0.68.0-static \
             test /policy/platform.rego /policy/platform_test.rego --verbose
 
-      - name: Validate workflow syntax
+      - name: Validate changed workflow syntax
         run: |
           docker run --rm -v "$PWD:/repo" -w /repo \
-            rhysd/actionlint:1.7.7
+            rhysd/actionlint:1.7.7 \
+            .github/workflows/p8-governance.yml \
+            .github/workflows/reusable-service-supply-chain.yml
 
       - name: Upload eval evidence
         if: always()
