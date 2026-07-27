@@ -1,0 +1,60 @@
+schemaVersion: 1
+profiles:
+  local:
+    releaseClass: development
+    providerMode: mock
+    dataClassification: synthetic
+    containsRealCustomerData: false
+    financialEffect: none
+    providers:
+      debtPortfolio: core-bancario-mock
+      eligibility: core-bancario-mock
+      simulation: core-bancario-mock
+      formalization: core-bancario-mock
+      cardServicing: core-bancario-mock
+  demo:
+    releaseClass: demonstration
+    providerMode: mock
+    dataClassification: synthetic
+    containsRealCustomerData: false
+    financialEffect: none
+    providers:
+      debtPortfolio: core-bancario-mock
+      eligibility: core-bancario-mock
+      simulation: core-bancario-mock
+      formalization: core-bancario-mock
+      cardServicing: core-bancario-mock
+  homologation:
+    releaseClass: non_production
+    providerMode: sandbox
+    dataClassification: masked_confidential
+    containsRealCustomerData: false
+    financialEffect: simulated
+    providers:
+      debtPortfolio: debt-platform-sandbox
+      eligibility: credit-policy-sandbox
+      simulation: negotiation-engine-sandbox
+      formalization: contracting-sandbox
+      cardServicing: card-platform-sandbox
+  production:
+    releaseClass: production
+    providerMode: real
+    dataClassification: confidential
+    containsRealCustomerData: true
+    financialEffect: transactional
+    providers:
+      debtPortfolio: debt-platform-api
+      eligibility: credit-policy-api
+      simulation: negotiation-engine-api
+      formalization: contracting-api
+      cardServicing: card-platform-api
+policy:
+  productionAllowedProviderModes: [real]
+  productionForbiddenProviders:
+    - core-bancario-mock
+  productionRequires:
+    - workloadIdentity
+    - persistentIdempotency
+    - auditEvidence
+    - reconciliation
+    - contractCertification
