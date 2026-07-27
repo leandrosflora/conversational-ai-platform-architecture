@@ -7,10 +7,12 @@ O profile padrão da POC continua usando HS256 com segredo independente por par 
 - emissor de tokens RS256;
 - descoberta OIDC;
 - publicação JWKS;
-- credenciais curtas por workload e audience;
+- tokens curtos por workload e audience;
+- autenticação bootstrap distinta por workload antes da emissão;
 - allowlist de pares emissor/destino;
 - decisão centralizada no OPA;
-- policy com evidência obrigatória para ações financeiras.
+- policy com evidência obrigatória para ações financeiras;
+- readiness fail-closed quando OPA ou credenciais bootstrap estão inválidos.
 
 Esse profile demonstra a migração e os contratos. Ele não substitui um provedor corporativo de identidade.
 
@@ -28,9 +30,35 @@ Endpoints locais:
 |---|---|
 | `GET /.well-known/openid-configuration` | descoberta OIDC |
 | `GET /jwks.json` | chave pública RS256 |
-| `POST /token` | token curto para par permitido |
+| `POST /token` | token curto para par permitido, após bootstrap authentication |
 | `POST /authorize` | valida JWT/tenant e consulta OPA |
-| `GET /health/ready` | readiness incluindo OPA |
+| `GET /health/ready` | readiness incluindo OPA e configuração bootstrap |
+
+## Emissão autenticada
+
+O solicitante envia sua identidade no corpo e prova que possui a credencial bootstrap correspondente:
+
+```http
+POST /token
+X-Workload-Bootstrap-Token: <credencial do workload>
+Content-Type: application/json
+
+{
+  "client_id": "renegotiation-service",
+  "audience": "core-bancario-mock",
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "ttl_seconds": 120
+}
+```
+
+O control plane:
+
+1. resolve a credencial esperada pelo `client_id`;
+2. compara em tempo constante;
+3. verifica se o par caller/audience é permitido;
+4. emite RS256 com `kid`, `sub`, `aud`, `tenant_id`, `jti` e expiração curta.
+
+As credenciais presentes no Compose são somente placeholders locais e são distintas por workload. Produção deve injetá-las por secret manager ou eliminar o bootstrap compartilhado usando identidade nativa, SPIFFE/SPIRE ou mTLS.
 
 ## Policy centralizada
 
@@ -65,7 +93,7 @@ dual validation HS256 + RS256
    ↓
 RS256/JWKS como padrão
    ↓
-credencial emitida por identidade de workload
+credencial emitida por identidade nativa de workload
    ↓
 mTLS/SPIFFE e policy corporativa
 ```
@@ -74,11 +102,11 @@ Durante o modo dual, o serviço deve registrar qual mecanismo validou cada chama
 
 ## Controles de produção necessários
 
-A implementação local gera uma chave RSA no primeiro startup e oferece `/token` sem autenticação de cliente. Isso é proposital para demonstração isolada e seria inseguro como emissor corporativo.
+A implementação local autentica a emissão com credenciais bootstrap por workload. Isso elimina a autoafirmação de `client_id`, mas ainda não equivale a identidade nativa.
 
-Produção precisa de:
+Produção ainda precisa de:
 
-- autenticação forte do workload solicitante;
+- identidade forte do workload sem segredo compartilhado;
 - chave em HSM/KMS;
 - rotação e revogação;
 - issuer HTTPS estável;
@@ -91,4 +119,13 @@ Produção precisa de:
 
 ## Testes
 
-`security/opa/platform_test.rego` cobre par permitido, par desconhecido, divergência de tenant e evidência financeira. O workflow `Security control plane` também sobe o ambiente e valida emissão RS256, JWKS e decisões reais.
+`security/opa/platform_test.rego` cobre par permitido, par desconhecido, divergência de tenant e evidência financeira. O workflow `Security control plane` sobe o ambiente e valida:
+
+- readiness fail-closed;
+- descoberta e JWKS;
+- emissão negada sem credencial;
+- emissão negada com credencial incorreta;
+- emissão RS256 autenticada;
+- allowlist de pares;
+- decisões OPA positivas e negativas;
+- divergência de tenant.
