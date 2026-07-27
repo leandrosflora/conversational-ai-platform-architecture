@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -11,6 +12,10 @@ PLATFORM_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = PLATFORM_ROOT / "release/release-manifest.yaml"
 POLICY_CONTRACT = PLATFORM_ROOT / "contracts/policy/authorization.yaml"
 SERVICES_MAP = PLATFORM_ROOT / "docs/contracts/services-map.md"
+SUPPLY_CHAIN_CALLER = re.compile(
+    r"leandrosflora/conversational-ai-platform-architecture/\.github/workflows/"
+    r"reusable-service-supply-chain\.yml@(?:v1|[0-9a-f]{40})"
+)
 
 
 def fail(message: str) -> None:
@@ -55,13 +60,12 @@ def main() -> int:
             fail(f"{args.service} is not referenced by the executable authorization contract")
 
         workflow_text = supply_chain.read_text(encoding="utf-8")
-        required_tokens = [
-            "reusable-service-supply-chain.yml@main",
-            f"service_name: {args.service}",
-        ]
-        for token in required_tokens:
-            if token not in workflow_text:
-                fail(f"supply-chain caller is missing {token!r}")
+        if not SUPPLY_CHAIN_CALLER.search(workflow_text):
+            fail("supply-chain caller must pin reusable-service-supply-chain.yml to @v1 or a full commit SHA")
+
+        service_token = f"service_name: {args.service}"
+        if service_token not in workflow_text:
+            fail(f"supply-chain caller is missing {service_token!r}")
     except (OSError, ValueError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
