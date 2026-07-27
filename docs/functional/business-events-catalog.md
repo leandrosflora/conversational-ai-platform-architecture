@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Representar resultados funcionais, e não apenas telemetria técnica. O catálogo executável está em [`contracts/functional/business-events.yaml`](https://github.com/leandrosflora/conversational-ai-platform-architecture/blob/main/contracts/functional/business-events.yaml).
+Representar resultados funcionais, e não apenas telemetria técnica. O catálogo executável está em `contracts/functional/business-events.yaml`.
 
 ## Envelope mínimo
 
