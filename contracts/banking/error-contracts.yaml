@@ -1,0 +1,52 @@
+schemaVersion: 1
+errors:
+  - code: CUSTOMER_NOT_FOUND
+    category: business
+    retryable: false
+    handoffRecommended: true
+  - code: CONTRACT_NOT_FOUND
+    category: business
+    retryable: false
+    handoffRecommended: true
+  - code: NOT_ELIGIBLE
+    category: business
+    retryable: false
+    handoffRecommended: false
+  - code: OFFER_EXPIRED
+    category: business
+    retryable: false
+    recoveryAction: resimulate
+  - code: BALANCE_CHANGED
+    category: consistency
+    retryable: false
+    recoveryAction: refresh_portfolio
+  - code: DUPLICATE_CONFIRMATION
+    category: idempotency
+    retryable: false
+    recoveryAction: retrieve_existing_result
+  - code: PROVIDER_TIMEOUT
+    category: technical
+    retryable: true
+    handoffRecommended: true
+  - code: PROVIDER_UNAVAILABLE
+    category: technical
+    retryable: true
+    handoffRecommended: true
+  - code: PROVIDER_CONTRACT_VIOLATION
+    category: integration
+    retryable: false
+    handoffRecommended: true
+  - code: RECONCILIATION_PENDING
+    category: consistency
+    retryable: true
+    handoffRecommended: true
+envelope:
+  required:
+    - code
+    - category
+    - retryable
+    - correlationId
+    - occurredAt
+  forbidden:
+    - rawCustomerData
+    - providerStackTrace
