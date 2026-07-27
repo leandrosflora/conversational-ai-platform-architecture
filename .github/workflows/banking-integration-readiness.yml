@@ -1,0 +1,35 @@
+name: Banking integration readiness
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/banking/**'
+      - 'docs/integration/**'
+      - 'scripts/validate-banking-integration.py'
+      - '.github/workflows/banking-integration-readiness.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/banking/**'
+      - 'docs/integration/**'
+      - 'scripts/validate-banking-integration.py'
+      - '.github/workflows/banking-integration-readiness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-banking-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install validation dependency
+        run: pip install PyYAML
+      - name: Compile validator
+        run: python -m py_compile scripts/validate-banking-integration.py
+      - name: Enforce no-mock-in-production and canonical contracts
+        run: python scripts/validate-banking-integration.py
