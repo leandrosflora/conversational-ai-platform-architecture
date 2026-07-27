@@ -4,6 +4,7 @@ services:
   redis:
     image: redis:7.4-alpine
     container_name: conversational-ai-redis
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
@@ -20,6 +21,7 @@ services:
   mongodb:
     image: mongo:7
     container_name: conversational-ai-mongodb
+    restart: unless-stopped
     ports:
       # Host port 27017 collides with a native mongod.exe Windows service already listening
       # on 127.0.0.1:27017 on this machine - Windows routes loopback traffic to that more
@@ -46,6 +48,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: conversational-ai-postgres
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -66,6 +69,7 @@ services:
   opensearch:
     image: opensearchproject/opensearch:3.7.0
     container_name: conversational-ai-opensearch
+    restart: unless-stopped
     environment:
       discovery.type: single-node
       # Local-dev-only: no external exposure beyond this Docker network, same trust model
@@ -92,6 +96,7 @@ services:
     # and requires an explicit KRaft CLUSTER_ID.
     image: apache/kafka:3.9.2
     container_name: conversational-ai-kafka
+    restart: unless-stopped
     ports:
       - "9092:9092"
       - "29092:29092"
@@ -249,6 +254,7 @@ services:
     build:
       context: ../core-bancario-mock
     container_name: conversational-ai-core-bancario-mock
+    restart: unless-stopped
     ports:
       - "9401:9401"
       - "9402:9402"
@@ -266,6 +272,7 @@ services:
     build:
       context: ../conversation-audit-service
     container_name: conversational-ai-conversation-audit-service
+    restart: unless-stopped
     ports:
       - "8300:8080"
     environment:
@@ -286,6 +293,7 @@ services:
     build:
       context: ../conversation-handoff-service
     container_name: conversational-ai-conversation-handoff-service
+    restart: unless-stopped
     ports:
       - "8200:8080"
     environment:
@@ -302,6 +310,7 @@ services:
     build:
       context: ../renegotiation-service
     container_name: conversational-ai-renegotiation-service
+    restart: unless-stopped
     ports:
       - "5266:8080"
     environment:
@@ -324,6 +333,7 @@ services:
     build:
       context: ../tool-service-renegotiation
     container_name: conversational-ai-tool-service-renegotiation
+    restart: unless-stopped
     ports:
       - "8400:8400"
       - "8401:8401"
@@ -352,6 +362,7 @@ services:
     build:
       context: ../tool-service-cartao-credito
     container_name: conversational-ai-tool-service-cartao-credito
+    restart: unless-stopped
     ports:
       - "8410:8410"
       - "8411:8411"
@@ -376,6 +387,7 @@ services:
     build:
       context: ../knowledge-service
     container_name: conversational-ai-knowledge-service
+    restart: unless-stopped
     ports:
       - "8500:8500"
     volumes:
@@ -402,6 +414,7 @@ services:
     build:
       context: ../agent-runtime-renegotiation
     container_name: conversational-ai-agent-runtime-renegotiation
+    restart: unless-stopped
     ports:
       - "8100:8100"
     environment:
@@ -445,6 +458,7 @@ services:
     build:
       context: ../conversation-orchestrator
     container_name: conversational-ai-conversation-orchestrator
+    restart: unless-stopped
     ports:
       - "5268:8080"
     environment:
@@ -493,6 +507,7 @@ services:
     build:
       context: ../agent-runtime-fatura-cartao
     container_name: conversational-ai-agent-runtime-fatura-cartao
+    restart: unless-stopped
     ports:
       - "8110:8110"
     environment:
@@ -516,6 +531,7 @@ services:
     build:
       context: ../conversation-memory-service
     container_name: conversational-ai-conversation-memory-service
+    restart: unless-stopped
     ports:
       - "8600:8600"
     environment:
@@ -536,6 +552,7 @@ services:
     build:
       context: ../whatsapp-bff
     container_name: conversational-ai-whatsapp-bff
+    restart: unless-stopped
     ports:
       - "5153:8080"
     environment:
