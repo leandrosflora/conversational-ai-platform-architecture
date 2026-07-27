@@ -60,14 +60,14 @@ jobs:
           python -m pip install --disable-pip-version-check pyyaml
           mkdir -p conversational-ai-platform-architecture/artifacts/e2e
           cp conversational-ai-platform-architecture/release/release-manifest.yaml \
-            conversational-ai-platform-architecture/artifacts/e2e/runtime-release-manifest.yaml
+            /tmp/runtime-release-manifest.yaml
           if [ -n "$CORE_REF_OVERRIDE" ]; then
             python - <<'PY'
           import os
           from pathlib import Path
           import yaml
 
-          path = Path("conversational-ai-platform-architecture/artifacts/e2e/runtime-release-manifest.yaml")
+          path = Path("/tmp/runtime-release-manifest.yaml")
           data = yaml.safe_load(path.read_text(encoding="utf-8"))
           for repository in data["repositories"]:
               if repository["name"] == "core-bancario-mock":
@@ -79,10 +79,12 @@ jobs:
           PY
           fi
           python conversational-ai-platform-architecture/scripts/checkout-release.py \
-            conversational-ai-platform-architecture/artifacts/e2e/runtime-release-manifest.yaml \
+            /tmp/runtime-release-manifest.yaml \
             "$GITHUB_WORKSPACE" \
             --reuse conversational-ai-platform-architecture \
             --lock conversational-ai-platform-architecture/artifacts/e2e/release-lock.yaml
+          cp /tmp/runtime-release-manifest.yaml \
+            conversational-ai-platform-architecture/artifacts/e2e/runtime-release-manifest.yaml
 
       - uses: actions/setup-dotnet@v5
         with:
