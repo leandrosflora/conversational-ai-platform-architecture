@@ -122,7 +122,7 @@ jobs:
       - name: Generate SPDX SBOM for OCI image
         uses: anchore/sbom-action@v0.20.6
         with:
-          image: "${{ inputs.service_name }}.oci.tar"
+          image: "oci-archive:${{ inputs.service_name }}.oci.tar"
           format: spdx-json
           output-file: "${{ inputs.service_name }}.spdx.json"
           upload-artifact: false
@@ -132,11 +132,13 @@ jobs:
         run: sha256sum "${{ inputs.service_name }}.oci.tar" "${{ inputs.service_name }}.spdx.json" > SHA256SUMS
 
       - name: Attest OCI archive provenance
+        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: "${{ inputs.service_name }}.oci.tar"
 
       - name: Attest SBOM
+        if: github.event_name != 'pull_request'
         uses: actions/attest-sbom@v3
         with:
           subject-path: "${{ inputs.service_name }}.oci.tar"
