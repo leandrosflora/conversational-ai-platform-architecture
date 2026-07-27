@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Conectar objetivos de negócio aos eventos e jornadas. A fonte executável está em [`contracts/functional/kpis.yaml`](../../contracts/functional/kpis.yaml).
+Conectar objetivos de negócio aos eventos e jornadas. A fonte executável está em [`contracts/functional/kpis.yaml`](https://github.com/leandrosflora/conversational-ai-platform-architecture/blob/main/contracts/functional/kpis.yaml).
 
 ## KPIs principais
 
