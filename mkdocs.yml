@@ -88,6 +88,9 @@ nav:
       - Dados e ownership: contracts/data-stores.md
       - Segurança: security/security-architecture.md
       - Supply chain: security/supply-chain.md
+      - Release e contratos executáveis: governance/release-contract-governance.md
+  - Segurança:
+      - Workload Identity e PDP: security/workload-identity-pdp.md
   - Decisões:
       - Kafka como fila durável: adr/0001-kafka-durable-webhook-queue.md
       - Arquitetura hexagonal: adr/0002-hexagonal-ports-and-adapters.md
@@ -100,6 +103,7 @@ nav:
       - Backup e recuperação: operations/disaster-recovery.md
       - Retenção e LGPD: governance/data-retention-lgpd.md
       - Carga e caos: testing/load-and-chaos.md
+      - Evals de IA: testing/evals.md
       - Atualização de dependências: roadmap/platform-dependency-upgrades.md
       - Roadmap de produção: roadmap/production-readiness.md
   - Evidências:
