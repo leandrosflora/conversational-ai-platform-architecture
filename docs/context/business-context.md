@@ -10,6 +10,12 @@ A Plataforma de IA Conversacional tem como objetivo disponibilizar um canal de r
 
 Embora a primeira versão utilize o WhatsApp como canal principal, a solução deve ser projetada de forma agnóstica ao canal, possibilitando sua reutilização futura em outros meios de comunicação.
 
+!!! warning "Escopo dos dados demonstrados"
+    A implementação executável deste repositório não acessa clientes, contratos, débitos, propostas, acordos, limites ou faturas reais. Os domínios funcionais de **recuperação/renegociação** e **cartão de crédito** operam com massas sintéticas e respostas determinísticas do `core-bancario-mock`. Os testes E2E demonstram a jornada, a integração e os controles arquiteturais; não representam processamento bancário produtivo nem validam regras financeiras reais.
+
+!!! info "Arquitetura-alvo"
+    Em uma implantação corporativa, o `core-bancario-mock` deve ser substituído por APIs reais e governadas dos sistemas bancários responsáveis por cadastro, contratos, débitos, elegibilidade, simulação, formalização, documentos, limite e fatura. Essa substituição deve preservar ou fortalecer autenticação de workload, autorização por operação, isolamento por tenant, idempotência, trilha de auditoria, contratos de API, observabilidade e tratamento de indisponibilidade.
+
 ---
 
 ## Problema de Negócio
@@ -71,7 +77,7 @@ Exemplos:
 
 #### Consulta de Débitos
 
-A plataforma deve consultar os contratos e débitos elegíveis para renegociação.
+A plataforma deve consultar os contratos e débitos elegíveis para renegociação. Na implementação de referência, os dados retornados são sintéticos; na arquitetura-alvo, a consulta deve ocorrer nas APIs reais responsáveis pelo produto e pelo registro financeiro.
 
 #### Atendimento Conversacional
 
@@ -85,11 +91,13 @@ A plataforma deve responder dúvidas dos clientes utilizando uma base de conheci
 
 #### Simulação de Propostas
 
-A plataforma deve gerar propostas de renegociação conforme regras de negócio e critérios de elegibilidade.
+A plataforma deve gerar propostas de renegociação conforme regras de negócio e critérios de elegibilidade. A simulação atual usa valores e regras de teste; produção deve delegar cálculo, elegibilidade e persistência ao sistema bancário real ou ao motor corporativo autorizado.
 
 #### Consulta de Fatura e Limite de Cartão de Crédito
 
 Além da jornada de renegociação, a plataforma disponibiliza uma segunda skill de atendimento: consulta de limite total/disponível e de valor/vencimento da fatura atual do cartão de crédito do cliente, após identificação por CPF. É uma skill somente-leitura, sem simulação, negociação ou formalização — o cliente pergunta e recebe a informação. Quando o cliente pergunta algo fora desse escopo (ex.: renegociação) dentro dessa skill, a plataforma reconhece o desvio e permite reapresentar o menu de opções.
+
+Os valores de limite, disponibilidade, fatura e vencimento demonstrados são dados sintéticos retornados pela Card API do `core-bancario-mock`. Na arquitetura-alvo, a skill deve consumir APIs reais do domínio de cartões, sem transformar o agente ou o Tool Service em fonte de verdade financeira.
 
 #### Negociação
 
@@ -102,7 +110,7 @@ O cliente poderá:
 
 #### Formalização
 
-A plataforma deve formalizar o acordo por meio da integração com sistemas internos do banco.
+A plataforma deve formalizar o acordo por meio da integração com sistemas internos do banco. A confirmação executada no ambiente de referência é simulada e não cria obrigação financeira real.
 
 #### Transferência para Atendimento Humano
 
@@ -123,6 +131,8 @@ Todas as interações relevantes devem ser registradas para fins de auditoria, c
 
 Os seguintes itens não fazem parte da primeira versão da solução:
 
+- Processamento de dados bancários produtivos.
+- Criação de acordos, contratos ou obrigações financeiras reais.
 - Atendimento por voz.
 - Gestão de estratégias de cobrança.
 - Motores de política de crédito.
@@ -199,11 +209,11 @@ Entretanto, a arquitetura deve suportar futura expansão para:
 5. A comunicação direciona o cliente para o WhatsApp oficial do banco.
 6. O cliente inicia a conversa.
 7. A identidade é validada.
-8. Os débitos elegíveis são consultados.
+8. Os débitos elegíveis são consultados nas APIs reais do produto na arquitetura-alvo; no ambiente de referência, são retornados pelo mock.
 9. As propostas disponíveis são apresentadas.
 10. O cliente realiza perguntas e solicita simulações.
 11. Uma proposta é selecionada.
-12. O acordo é formalizado.
+12. O acordo é formalizado no sistema bancário real; no ambiente de referência, a confirmação é simulada.
 13. O comprovante é disponibilizado ao cliente.
 
 ---
@@ -219,6 +229,8 @@ Entretanto, a arquitetura deve suportar futura expansão para:
 7. O contrato é formalizado.
 8. A confirmação é enviada ao cliente.
 
+Na referência executável, todas as informações financeiras e confirmações desta jornada são sintéticas.
+
 ---
 
 ### Jornada 3 — Consulta de Fatura e Limite de Cartão de Crédito
@@ -226,7 +238,7 @@ Entretanto, a arquitetura deve suportar futura expansão para:
 1. O cliente inicia a conversa pelo WhatsApp e escolhe (ou é roteado para) a skill de cartão de crédito.
 2. A identidade é validada por CPF.
 3. O cliente pergunta pelo limite disponível e/ou pelo valor da fatura atual.
-4. A plataforma consulta o limite e/ou a fatura no Core Bancário e responde.
+4. A plataforma consulta limite e fatura. Atualmente, a resposta vem do `core-bancario-mock`; na arquitetura-alvo, deve vir das APIs reais do domínio de cartões.
 5. Caso o cliente faça uma pergunta fora desse escopo (ex.: renegociação), a plataforma sinaliza o desvio e reapresenta o menu de skills.
 
 ---
@@ -235,7 +247,7 @@ Entretanto, a arquitetura deve suportar futura expansão para:
 
 ### Agente Autônomo
 
-Responsável por conduzir a jornada de renegociação, interpretar mensagens, decidir próximos passos e acionar ferramentas corporativas autorizadas.
+Responsável por conduzir a jornada de renegociação, interpretar mensagens, decidir próximos passos e acionar ferramentas corporativas autorizadas. O agente não calcula nem inventa valores financeiros e não é fonte de verdade do produto.
 
 ### RAG (Retrieval Augmented Generation)
 
