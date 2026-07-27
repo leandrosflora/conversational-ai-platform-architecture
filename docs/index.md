@@ -2,6 +2,9 @@
 
 Arquitetura de referência executável para plataformas corporativas de IA conversacional com agentes, MCP, RAG, WhatsApp, sistemas transacionais, segurança interna e observabilidade ponta a ponta.
 
+!!! warning "Dados bancários sintéticos"
+    As jornadas de **renegociação** e **cartão de crédito** usam exclusivamente dados de teste, CPFs reservados e respostas geradas pelo `core-bancario-mock`. Nenhuma informação financeira real, contrato real, fatura real ou operação bancária real é processada. Na arquitetura-alvo, o mock deve ser substituído por APIs reais e governadas do Core Bancário, preservando os contratos funcionais, controles de identidade, autorização, idempotência, auditoria e observabilidade.
+
 [:material-sitemap-outline: Explorar a arquitetura](architecture/c4-context.md){ .md-button .md-button--primary }
 [:material-github: Ver o repositório](https://github.com/leandrosflora/conversational-ai-platform-architecture){ .md-button }
 
@@ -13,7 +16,7 @@ Arquitetura de referência executável para plataformas corporativas de IA conve
 
     ---
 
-    WhatsApp Cloud API, OpenAI, Core Bancário Mock autenticado, 12 serviços, cinco datastores e observabilidade local executável.
+    WhatsApp Cloud API, OpenAI, Core Bancário Mock autenticado, 12 serviços, cinco datastores e observabilidade local executável. Os domínios de renegociação e cartão operam com massas sintéticas de teste.
 
     [Abrir C4 de contexto atual](architecture/C4/c4-context.puml)
 
@@ -21,7 +24,7 @@ Arquitetura de referência executável para plataformas corporativas de IA conve
 
     ---
 
-    Salesforce, Data Lake, automação de campanha, atendimento humano integrado, Model Gateway, PDP e infraestrutura gerenciada.
+    Salesforce, Data Lake, automação de campanha, atendimento humano integrado, Model Gateway, PDP, infraestrutura gerenciada e APIs reais do Core Bancário para contratos, débitos, elegibilidade, simulações, formalização, limite e fatura.
 
     [Abrir C4 de contexto alvo](architecture/C4/c4-context-target.puml)
 
@@ -75,7 +78,7 @@ Arquitetura de referência executável para plataformas corporativas de IA conve
 
     ---
 
-    CI, E2E multi-repositório, SBOM, backup/restore e carga/caos produzem evidências auditáveis.
+    CI, E2E multi-repositório, SBOM, backup/restore e carga/caos produzem evidências auditáveis sobre a integração e os controles, não sobre dados financeiros reais.
 
     [Runbook](runbook.md)
 
@@ -90,7 +93,7 @@ Arquitetura de referência executável para plataformas corporativas de IA conve
 | Raciocínio | Agent Runtime decide a próxima ação |
 | Ferramentas | Tool Service aplica identidade e policy |
 | Domínio | Renegotiation Service revalida e coordena o Core |
-| Core | valida caller/tenant e protege operações mutáveis por chave |
+| Core | O mock fornece dados sintéticos; no alvo, APIs bancárias reais validam caller/tenant e protegem operações mutáveis |
 | Suporte | memória, conhecimento, auditoria e handoff completam a experiência |
 
 [Ver diagramas de sequência](architecture/sequence-diagrams.md){ .md-button }
@@ -110,4 +113,4 @@ Arquitetura de referência executável para plataformas corporativas de IA conve
 | Execução | Docker Compose, GitHub Actions, k6 e scripts de drill |
 
 !!! success "Arquitetura executável"
-    O projeto registra validações reais, smoke test de infraestrutura e um workflow E2E coordenado dos 12 serviços.
+    O projeto registra validações reais, smoke test de infraestrutura e um workflow E2E coordenado dos 12 serviços usando massas sintéticas e um Core Bancário mockado.
