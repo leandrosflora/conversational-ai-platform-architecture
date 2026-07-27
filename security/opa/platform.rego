@@ -4,29 +4,55 @@ import future.keywords.in
 
 default allow := false
 
-allowed_pairs := {
-  "whatsapp-bff": {"conversation-orchestrator"},
+allowed_actions := {
+  "whatsapp-bff": {
+    "conversation-orchestrator": {"processar_mensagem"},
+  },
   "conversation-orchestrator": {
-    "agent-runtime-renegotiation",
-    "agent-runtime-fatura-cartao",
-    "conversation-audit-service",
-    "conversation-handoff-service",
-    "conversation-memory-service",
-    "whatsapp-bff",
+    "agent-runtime-renegotiation": {"processar_agente"},
+    "agent-runtime-fatura-cartao": {"processar_agente"},
+    "conversation-audit-service": {"registrar_auditoria"},
+    "conversation-handoff-service": {"solicitar_handoff"},
+    "conversation-memory-service": {"projetar_memoria"},
+    "whatsapp-bff": {"enviar_resposta"},
   },
   "agent-runtime-renegotiation": {
-    "tool-service-renegotiation",
-    "knowledge-service",
-    "conversation-memory-service",
+    "tool-service-renegotiation": {"executar_tool"},
+    "knowledge-service": {"buscar_conhecimento"},
+    "conversation-memory-service": {"consultar_memoria"},
   },
-  "agent-runtime-fatura-cartao": {"tool-service-cartao-credito"},
-  "tool-service-renegotiation": {"renegotiation-service"},
-  "renegotiation-service": {"core-bancario-mock"},
-  "tool-service-cartao-credito": {"core-bancario-mock"},
+  "agent-runtime-fatura-cartao": {
+    "tool-service-cartao-credito": {"executar_tool"},
+  },
+  "tool-service-renegotiation": {
+    "renegotiation-service": {
+      "consultar_cliente",
+      "consultar_elegibilidade",
+      "simular_proposta",
+      "confirmar_acordo",
+      "consultar_documento",
+    },
+  },
+  "renegotiation-service": {
+    "core-bancario-mock": {
+      "consultar_cliente",
+      "consultar_elegibilidade",
+      "simular_proposta",
+      "confirmar_acordo",
+      "consultar_documento",
+    },
+  },
+  "tool-service-cartao-credito": {
+    "core-bancario-mock": {"consultar_limite", "consultar_fatura"},
+  },
 }
 
 pair_allowed {
-  input.audience in allowed_pairs[input.claims.sub]
+  allowed_actions[input.claims.sub][input.audience]
+}
+
+action_allowed {
+  input.action in allowed_actions[input.claims.sub][input.audience]
 }
 
 tenant_matches {
@@ -62,12 +88,14 @@ financial_evidence_valid {
 
 allow {
   pair_allowed
+  action_allowed
   tenant_matches
   not financial_action
 }
 
 allow {
   pair_allowed
+  action_allowed
   tenant_matches
   financial_action
   financial_evidence_valid
