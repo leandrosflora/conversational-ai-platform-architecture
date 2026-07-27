@@ -1,0 +1,75 @@
+schemaVersion: 1
+release: p8-development
+mode: development
+owner: leandrosflora
+repositories:
+  - name: conversational-ai-platform-architecture
+    repository: leandrosflora/conversational-ai-platform-architecture
+    path: conversational-ai-platform-architecture
+    ref: main
+    role: architecture
+  - name: whatsapp-bff
+    repository: leandrosflora/whatsapp-bff
+    path: whatsapp-bff
+    ref: master
+    role: channel
+  - name: conversation-orchestrator
+    repository: leandrosflora/conversation-orchestrator
+    path: conversation-orchestrator
+    ref: master
+    role: orchestration
+  - name: agent-runtime-renegotiation
+    repository: leandrosflora/agent-runtime-renegotiation
+    path: agent-runtime-renegotiation
+    ref: master
+    role: agent
+  - name: tool-service-renegotiation
+    repository: leandrosflora/tool-service-renegotiation
+    path: tool-service-renegotiation
+    ref: master
+    role: tool-service
+  - name: renegotiation-service
+    repository: leandrosflora/renegotiation-service
+    path: renegotiation-service
+    ref: master
+    role: domain-service
+  - name: agent-runtime-fatura-cartao
+    repository: leandrosflora/agent-runtime-fatura-cartao
+    path: agent-runtime-fatura-cartao
+    ref: master
+    role: agent
+  - name: tool-service-cartao-credito
+    repository: leandrosflora/tool-service-cartao-credito
+    path: tool-service-cartao-credito
+    ref: master
+    role: tool-service
+  - name: knowledge-service
+    repository: leandrosflora/knowledge-service
+    path: knowledge-service
+    ref: master
+    role: knowledge
+  - name: conversation-memory-service
+    repository: leandrosflora/conversation-memory-service
+    path: conversation-memory-service
+    ref: master
+    role: memory
+  - name: conversation-audit-service
+    repository: leandrosflora/conversation-audit-service
+    path: conversation-audit-service
+    ref: master
+    role: audit
+  - name: conversation-handoff-service
+    repository: leandrosflora/conversation-handoff-service
+    path: conversation-handoff-service
+    ref: master
+    role: handoff
+  - name: core-bancario-mock
+    repository: leandrosflora/core-bancario-mock
+    path: core-bancario-mock
+    ref: master
+    role: external-system-mock
+policy:
+  requireCleanCheckout: true
+  requireDetachedSha: true
+  requireSignedReleaseArtifacts: true
+  requiredRepositoryCount: 13

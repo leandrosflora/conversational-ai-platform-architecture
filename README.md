@@ -3,7 +3,7 @@
 [![Documentation](https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs&logoColor=white)](https://leandrosflora.github.io/conversational-ai-platform-architecture/)
 [![Publish MkDocs](https://github.com/leandrosflora/conversational-ai-platform-architecture/actions/workflows/docs.yml/badge.svg)](https://github.com/leandrosflora/conversational-ai-platform-architecture/actions/workflows/docs.yml)
 
-Arquitetura de referência executável para IA conversacional com agentes, MCP, RAG, WhatsApp, APIs corporativas, consistência transacional, segurança interna e observabilidade.
+Arquitetura de referência executável para IA conversacional com agentes, MCP, RAG, WhatsApp, APIs corporativas, consistência transacional, segurança interna, contratos executáveis e observabilidade.
 
 **Documentação:** https://leandrosflora.github.io/conversational-ai-platform-architecture/
 
@@ -16,6 +16,9 @@ Arquitetura de referência executável para IA conversacional com agentes, MCP, 
 - [Contratos Kafka](docs/contracts/kafka-events.md)
 - [Ownership de dados](docs/contracts/data-stores.md)
 - [Arquitetura de segurança](docs/security/security-architecture.md)
+- [Release e contratos executáveis](docs/governance/release-contract-governance.md)
+- [Workload Identity e PDP](docs/security/workload-identity-pdp.md)
+- [Evals de IA](docs/testing/evals.md)
 - [Runbook](docs/runbook.md)
 - [SLOs e alertas](docs/operations/slo-alerting.md)
 - [Backup e recuperação](docs/operations/disaster-recovery.md)
@@ -53,6 +56,24 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml down
 
 Grafana é provisionado com Prometheus, Loki e Jaeger. Alloy coleta logs. Prometheus carrega regras versionadas e envia alertas para o Alertmanager local.
 
+## Validações P8
+
+```bash
+python -m pip install pyyaml
+python scripts/validate-executable-contracts.py
+python scripts/run-evals.py --mode offline --output artifacts/evals-offline.json
+```
+
+Profile local de identidade assimétrica e policy centralizada:
+
+```bash
+docker compose -f docker-compose.security.yml up -d --build --wait
+python scripts/validate-security-control-plane.py
+docker compose -f docker-compose.security.yml down -v
+```
+
+O `release/release-manifest.yaml` é resolvido para um lock com SHAs exatos antes do E2E multi-repositório. O lock, e não as branches móveis, é a unidade de promoção e rollback.
+
 ## Repositórios de serviço
 
 | Serviço | Repositório |
@@ -70,20 +91,23 @@ Grafana é provisionado com Prometheus, Loki e Jaeger. Alloy coleta logs. Promet
 | Conversation Audit | [conversation-audit-service](https://github.com/leandrosflora/conversation-audit-service) |
 | Conversation Handoff | [conversation-handoff-service](https://github.com/leandrosflora/conversation-handoff-service) |
 
-Os 12 repositórios possuem pipeline de build. O `core-bancario-mock` agora executa testes de integração de health, autenticação e idempotência; a cobertura dos demais serviços continua sendo responsabilidade dos pipelines próprios.
+Os 12 repositórios possuem pipeline de build. O Core executa testes de integração de health, autenticação e idempotência. O change set P8 adiciona CodeQL, dependency review, Trivy, SBOM e atestações de release de forma uniforme nos serviços.
 
 ## CI e evidência
 
 O CI deste repositório valida:
 
-- Compose e contratos;
+- Compose e contratos canônicos;
+- contratos OpenAPI, AsyncAPI e autorização;
+- manifesto de release e inventário de repositórios;
+- evals determinísticos;
+- OPA e profile JWKS/RS256;
 - Alloy, Prometheus e Alertmanager;
-- scripts e documentação canônica;
-- C4, MkDocs e links;
+- scripts, C4, MkDocs e links;
 - Trivy/SARIF e SBOM;
 - smoke test real da infraestrutura.
 
-O workflow `Multi-repository E2E` faz checkout dos 12 serviços, registra commits, executa builds/testes, sobe o stack, injeta webhook assinado, valida o Core autenticado e publica evidências. Requer `MULTIREPO_READ_TOKEN`.
+O workflow `Multi-repository E2E` resolve os 13 repositórios para SHAs, registra um release lock, executa builds/testes, sobe o stack, injeta webhook assinado, valida o Core autenticado, executa evals online e carga k6, e publica evidências. Requer `MULTIREPO_READ_TOKEN`.
 
 ## Kafka
 
@@ -91,23 +115,30 @@ Existem 9 tópicos. `channel.webhook.received` e `.retry` possuem consumers; `.d
 
 ## Segurança
 
-Implementado:
+Implementado no profile padrão:
 
 - HMAC no webhook;
 - JWT interno HS256 com segredo por par;
 - tenant assinado;
-- policy determinística de tools de renegociação;
-- Core com caller/tenant validados no Compose integrado;
-- idempotência durável no Renegotiation Service e replay process-local no Core;
+- policy determinística de tools;
+- Core com caller, tenant e idempotência validados;
 - Inbox/Outbox;
 - Trivy, SARIF e SBOM.
 
-Bloqueadores de produção:
+Implementado como profile de migração executável:
 
-- workload identity/JWKS ou mTLS e rotação de segredos;
+- tokens RS256;
+- descoberta OIDC e JWKS;
+- allowlist por workload/audience;
+- OPA como PDP centralizado;
+- testes de evidência financeira e tenant.
+
+Bloqueadores corporativos restantes:
+
+- integrar os serviços ao emissor corporativo/SPIFFE em modo dual e depois remover HS256;
+- HSM/KMS, rotação, revogação e mTLS;
 - persistência real/idempotente no sistema bancário final;
 - receivers reais e processo de incidentes;
-- assinatura/atestado de imagens em todos os serviços;
-- retenção/LGPD e DR corporativos.
+- retenção/LGPD e DR regional.
 
 Consulte o [roadmap de produção](docs/roadmap/production-readiness.md).

@@ -1,0 +1,51 @@
+services:
+  opa:
+    image: openpolicyagent/opa:0.68.0-static
+    container_name: conversational-ai-opa
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - /policy/platform.rego
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./security/opa:/policy:ro
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "true"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - security-control-plane
+
+  security-control-plane:
+    build:
+      context: ./security/control-plane
+    container_name: conversational-ai-security-control-plane
+    environment:
+      WORKLOAD_ISSUER: http://security-control-plane:8700
+      WORKLOAD_PUBLIC_ISSUER: http://localhost:8700
+      WORKLOAD_PRIVATE_KEY_PATH: /data/workload-private.pem
+      OPA_URL: http://opa:8181/v1/data/platform/authz/allow
+    ports:
+      - "8700:8700"
+    volumes:
+      - workload-identity-data:/data
+    depends_on:
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8700/health/ready', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - security-control-plane
+
+networks:
+  security-control-plane:
+    name: conversational-ai-security-control-plane
+
+volumes:
+  workload-identity-data:

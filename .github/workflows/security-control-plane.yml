@@ -1,0 +1,53 @@
+name: Security control plane
+
+on:
+  pull_request:
+    paths:
+      - "security/**"
+      - "docker-compose.security.yml"
+      - "scripts/validate-security-control-plane.py"
+      - ".github/workflows/security-control-plane.yml"
+  push:
+    branches: [main]
+    paths:
+      - "security/**"
+      - "docker-compose.security.yml"
+      - "scripts/validate-security-control-plane.py"
+      - ".github/workflows/security-control-plane.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workload-identity-and-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Test OPA policy
+        run: |
+          docker run --rm \
+            -v "$PWD/security/opa:/policy:ro" \
+            openpolicyagent/opa:0.68.0-static \
+            test /policy/platform.rego /policy/platform_test.rego --verbose
+
+      - name: Validate security Compose
+        run: docker compose -f docker-compose.security.yml config --quiet
+
+      - name: Start security control plane
+        run: docker compose -f docker-compose.security.yml up -d --build --wait
+
+      - name: Validate RS256 JWKS and policy decisions
+        run: python scripts/validate-security-control-plane.py
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose -f docker-compose.security.yml ps
+          docker compose -f docker-compose.security.yml logs --no-color --tail=300
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.security.yml down -v --remove-orphans
