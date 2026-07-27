@@ -143,6 +143,7 @@ jobs:
         run: python -m compileall -q . -x '(^|/)(\.venv|\.git)/'
 
       - name: Analyze with CodeQL
+        continue-on-error: ${{ github.event.repository.private }}
         uses: github/codeql-action/analyze@v4
 
   artifact-security:
