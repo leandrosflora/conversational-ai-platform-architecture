@@ -79,6 +79,9 @@ nav:
       - Governança do conhecimento: functional/knowledge-governance.md
       - KPIs funcionais: functional/business-kpi-map.md
       - Matriz de rastreabilidade: functional/traceability-matrix.md
+  - Integração bancária:
+      - Readiness para Core real: integration/banking-core-readiness.md
+      - Checklist de onboarding: integration/core-onboarding-checklist.md
   - Serviços:
       - Mapa completo: contracts/services-map.md
       - WhatsApp BFF: services/whatsapp-bff.md
