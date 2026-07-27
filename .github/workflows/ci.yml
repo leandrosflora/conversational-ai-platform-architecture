@@ -105,17 +105,14 @@ jobs:
       - name: Synchronize generated diagrams on same-repository PRs
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          git add docs/architecture/C4/c4-context.svg \
-                  docs/architecture/C4/c4-context.png \
-                  docs/architecture/C4/c4-container.svg \
-                  docs/architecture/C4/c4-container.png
+          git add docs/architecture/C4/*.svg docs/architecture/C4/*.png
           if git diff --cached --quiet; then
             echo "Generated diagrams already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "docs: regenerate C4 artifacts [skip ci]"
+          git commit -m "docs: regenerate C4 artifacts"
           git push origin "HEAD:${{ github.head_ref }}"
 
       - name: Upload generated diagrams
@@ -124,10 +121,8 @@ jobs:
           name: c4-diagrams
           if-no-files-found: error
           path: |
-            docs/architecture/C4/c4-context.svg
-            docs/architecture/C4/c4-context.png
-            docs/architecture/C4/c4-container.svg
-            docs/architecture/C4/c4-container.png
+            docs/architecture/C4/*.svg
+            docs/architecture/C4/*.png
 
   link-validation:
     runs-on: ubuntu-latest

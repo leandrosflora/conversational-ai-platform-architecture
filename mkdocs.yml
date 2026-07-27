@@ -63,10 +63,10 @@ nav:
   - Visão geral:
       - Contexto de negócio: context/business-context.md
       - Arquitetura C4: architecture/c4-context.md
-      - Contexto implementado: architecture/C4/c4-context.puml
-      - Contexto alvo: architecture/C4/c4-context-target.puml
-      - Containers atuais: architecture/C4/c4-container-current.puml
-      - Containers alvo: architecture/C4/c4-container-target.puml
+      - Contexto implementado: architecture/c4-context-current.md
+      - Contexto alvo: architecture/c4-context-target.md
+      - Containers atuais: architecture/c4-container-current.md
+      - Containers alvo: architecture/c4-container-target.md
       - Jornadas e sequências: architecture/sequence-diagrams.md
   - Arquitetura funcional:
       - Mapa de capacidades: functional/capability-map.md
