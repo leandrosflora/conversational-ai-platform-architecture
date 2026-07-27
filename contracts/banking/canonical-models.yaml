@@ -1,0 +1,64 @@
+schemaVersion: 1
+models:
+  Money:
+    required: [amount, currency, referenceDate]
+    properties:
+      amount: decimal
+      currency: ISO-4217
+      referenceDate: date
+  CustomerReference:
+    required: [customerToken]
+    properties:
+      customerToken: opaque-string
+      assuranceLevel: [identified, verified, strong_authenticated]
+  DebtContract:
+    required: [contractId, productType, status, outstandingBalance]
+    properties:
+      contractId: opaque-string
+      productType: controlled-vocabulary
+      status: [current, overdue, renegotiated, closed]
+      outstandingBalance: Money
+      daysPastDue: integer
+  EligibilityDecision:
+    required: [contractId, eligible, decisionCode, decidedAt]
+    properties:
+      contractId: opaque-string
+      eligible: boolean
+      decisionCode: controlled-vocabulary
+      decidedAt: datetime
+      validUntil: datetime
+  NegotiationOffer:
+    required: [simulationId, contractId, totalAmount, installments, expiresAt]
+    properties:
+      simulationId: opaque-string
+      contractId: opaque-string
+      totalAmount: Money
+      installments: integer
+      installmentAmount: Money
+      expiresAt: datetime
+  Agreement:
+    required: [agreementId, simulationId, status, formalizedAt]
+    properties:
+      agreementId: opaque-string
+      simulationId: opaque-string
+      status: [confirmed, formalized, cancelled]
+      formalizedAt: datetime
+      documentReference: opaque-string
+  CardLimit:
+    required: [total, available, referenceDate]
+    properties:
+      total: Money
+      available: Money
+      referenceDate: datetime
+  CardInvoice:
+    required: [invoiceId, amount, dueDate, status]
+    properties:
+      invoiceId: opaque-string
+      amount: Money
+      dueDate: date
+      status: [open, closed, paid, overdue]
+rules:
+  - canonical_models_must_not_expose_legacy_field_names
+  - financial_values_require_currency_and_reference_date
+  - external_ids_are_opaque
+  - adapters_are_responsible_for_mapping_and_validation
