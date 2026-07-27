@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Separar a plataforma conversacional, os domínios de negócio e os sistemas corporativos. A fonte executável é [`contracts/functional/domains.yaml`](../../contracts/functional/domains.yaml).
+Separar a plataforma conversacional, os domínios de negócio e os sistemas corporativos. A fonte executável é [`contracts/functional/domains.yaml`](https://github.com/leandrosflora/conversational-ai-platform-architecture/blob/main/contracts/functional/domains.yaml).
 
 ## Domínios
 
