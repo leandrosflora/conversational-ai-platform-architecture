@@ -137,6 +137,7 @@ jobs:
             --max-retries 2
             --timeout 20
             --exclude-path site
+            --exclude '^https://leandrosflora\.github\.io/conversational-ai-platform-architecture(?:/.*)?$'
             './README.md'
             './docs/**/*.md'
         env:
