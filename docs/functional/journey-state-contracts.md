@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Validar deterministicamente o estado que cada Agent Runtime devolve. A fonte executável está em [`contracts/functional/journeys.yaml`](../../contracts/functional/journeys.yaml).
+Validar deterministicamente o estado que cada Agent Runtime devolve. A fonte executável está em [`contracts/functional/journeys.yaml`](https://github.com/leandrosflora/conversational-ai-platform-architecture/blob/main/contracts/functional/journeys.yaml).
 
 ## Estrutura
 
