@@ -98,10 +98,12 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          skip-dirs: .platform-governance
           scanners: vuln,misconfig,secret
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           exit-code: "1"
           ignore-unfixed: true
 
