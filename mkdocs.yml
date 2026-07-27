@@ -68,6 +68,17 @@ nav:
       - Containers atuais: architecture/C4/c4-container-current.puml
       - Containers alvo: architecture/C4/c4-container-target.puml
       - Jornadas e sequências: architecture/sequence-diagrams.md
+  - Arquitetura funcional:
+      - Mapa de capacidades: functional/capability-map.md
+      - Mapa de domínios: functional/domain-map.md
+      - Contrato de skill: functional/skill-contract.md
+      - Estados de jornada: functional/journey-state-contracts.md
+      - Eventos de negócio: functional/business-events-catalog.md
+      - Ciclo de handoff: functional/handoff-case-lifecycle.md
+      - Contexto de identidade: functional/customer-identity-context.md
+      - Governança do conhecimento: functional/knowledge-governance.md
+      - KPIs funcionais: functional/business-kpi-map.md
+      - Matriz de rastreabilidade: functional/traceability-matrix.md
   - Serviços:
       - Mapa completo: contracts/services-map.md
       - WhatsApp BFF: services/whatsapp-bff.md
