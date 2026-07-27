@@ -4,7 +4,7 @@
 
 Organizar a plataforma pelo valor entregue ao negócio, independentemente dos agentes, serviços ou tecnologias usados na implementação.
 
-A fonte executável deste mapa é [`contracts/functional/capabilities.yaml`](https://github.com/leandrosflora/conversational-ai-platform-architecture/blob/main/contracts/functional/capabilities.yaml).
+A fonte executável deste mapa é `contracts/functional/capabilities.yaml`.
 
 ## Mapa L1
 
