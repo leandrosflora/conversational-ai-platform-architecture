@@ -28,6 +28,10 @@ services:
       WORKLOAD_PUBLIC_ISSUER: http://localhost:8700
       WORKLOAD_PRIVATE_KEY_PATH: /data/workload-private.pem
       OPA_URL: http://opa:8181/v1/data/platform/authz/allow
+      # Local-only bootstrap credentials. Production must inject workload-bound
+      # credentials from a secret manager or replace this bootstrap with SPIFFE/mTLS.
+      WORKLOAD_BOOTSTRAP_SECRETS_JSON: >-
+        {"whatsapp-bff":"local-whatsapp-bff-bootstrap-secret-000001","conversation-orchestrator":"local-conversation-orchestrator-bootstrap-0002","agent-runtime-renegotiation":"local-agent-runtime-renegotiation-bootstrap-03","agent-runtime-fatura-cartao":"local-agent-runtime-card-bootstrap-secret-04","tool-service-renegotiation":"local-tool-renegotiation-bootstrap-secret-0005","renegotiation-service":"local-renegotiation-service-bootstrap-secret-06","tool-service-cartao-credito":"local-tool-card-bootstrap-secret-0000007"}
     ports:
       - "8700:8700"
     volumes:
