@@ -53,6 +53,26 @@ groups:
           summary: "Falhas no dispatcher da Outbox"
           description: "Efeitos obrigatórios da jornada não estão sendo publicados com sucesso."
 
+      - alert: OrchestratorOutboxEffectsDeadLettered
+        expr: sum(rate(orchestrator_outbox_dispatch_total{outcome="dead_letter"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: conversation-orchestrator
+        annotations:
+          summary: "Efeitos da Outbox foram parkeados como não-retentáveis"
+          description: "Um ou mais efeitos exigem reconciliação manual (status='failed' com next_attempt_at ~10 anos no futuro). Veja ops.orchestrator_outbox."
+
+      - alert: OrchestratorOutboxStalled
+        expr: orchestrator_outbox_oldest_unresolved_seconds > 300
+        for: 2m
+        labels:
+          severity: critical
+          service: conversation-orchestrator
+        annotations:
+          summary: "Outbox do Orchestrator com efeito parado há mais de 5 minutos"
+          description: "Há efeito não resolvido na Outbox (pending/publishing/failed-em-retry) com mais de 5 minutos de idade - o dispatcher pode estar travado (ex.: predecessor de journey_version órfão) e clientes podem estar sem resposta."
+
       - alert: OrchestratorLateMessagesIncreasing
         expr: sum(rate(orchestrator_late_messages_total[10m])) > 0
         for: 5m
