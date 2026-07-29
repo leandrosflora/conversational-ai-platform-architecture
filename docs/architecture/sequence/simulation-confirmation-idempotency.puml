@@ -1,0 +1,49 @@
+@startuml
+hide footbox
+autonumber
+
+participant Agent
+participant "Tool Service" as Tools
+participant "Renegotiation Service" as Reneg
+database "PostgreSQL\nrenegotiation_idempotency" as Idem
+participant "Core Bancário Mock" as Core
+database "Memória do processo\nCore idempotency" as CoreIdem
+
+Agent -> Tools: simular_proposta
+Tools -> Tools: policy por stage\ngera chave determinística
+Tools -> Reneg: JWT governed_tool + Idempotency-Key
+Reneg -> Reneg: valida policy_id == header
+Reneg -> Idem: INSERT key/requestHash status=processing
+
+alt chave nova no domínio
+  Reneg -> Core: JWT + tenant + Idempotency-Key\nrequest
+  Core -> Core: valida caller, assinatura e tenant
+  Core -> CoreIdem: reserve(tenant, operation, key, hash)
+  alt chave Core nova
+    Core -> Core: executa mock
+    Core -> CoreIdem: armazena resposta
+    Core --> Reneg: resultado
+  else replay igual
+    CoreIdem --> Core: resposta armazenada
+    Core --> Reneg: mesmo resultado
+  else payload divergente
+    Core --> Reneg: 409 non-retryable
+  end
+  Reneg -> Idem: status=completed + response
+  Reneg --> Tools: resultado
+else chave concluída no domínio
+  Idem --> Reneg: resposta persistida
+  Reneg --> Tools: mesmo resultado sem chamar Core
+else mesma chave com outro request
+  Reneg --> Tools: 409 conflict
+else processing/failed ambíguo
+  Reneg --> Tools: 409/reconciliação
+end
+
+Agent -> Tools: confirmar_acordo
+Tools -> Tools: exige estágio e evidência
+Tools -> Reneg: JWT governed_tool + policy_id
+Reneg -> Reneg: revalida evidência
+Reneg -> Core: JWT + tenant + Idempotency-Key
+Core -> CoreIdem: reserva/replay/conflict
+@enduml

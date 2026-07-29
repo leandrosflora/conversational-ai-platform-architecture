@@ -1,0 +1,54 @@
+@startuml
+hide footbox
+autonumber
+
+actor Cliente
+participant "WhatsApp Cloud API" as Meta
+participant "whatsapp-bff" as BFF
+queue "Kafka\nchannel.webhook.received" as Kafka
+participant "conversation-orchestrator" as Orch
+database "PostgreSQL\nInbox + State + Outbox" as Pg
+participant "agent-runtime-renegotiation" as Agent
+participant "tool-service-renegotiation" as Tools
+participant "renegotiation-service" as Reneg
+participant "Core Bancário Mock" as Core
+
+Cliente -> Meta: mensagem
+Meta -> BFF: POST /webhooks/whatsapp\nX-Hub-Signature-256
+BFF -> BFF: valida HMAC e reserva messageId
+BFF ->> Kafka: payload bruto + traceparent
+Kafka --> BFF: confirmação de persistência
+BFF --> Meta: 200 OK
+
+Kafka ->> BFF: entrega ao consumer
+BFF -> Orch: POST /messages\nJWT + X-Tenant-Id
+Orch -> Pg: acquire Inbox + lease da conversa
+Pg --> Orch: checkpoint(stage, version, lastReceivedAt)
+
+alt mensagem atrasada
+  Orch -> Pg: Inbox=completed\nreason=late_message
+  Orch --> BFF: 202
+else mensagem atual
+  Orch -> Agent: POST /process\nmessageId + stage + version
+  Agent -> Tools: MCP + JWT tool_execution
+  Tools -> Tools: valida caller, stage, versão\ne evidência de confirmação
+
+  alt operação permitida
+    Tools -> Reneg: JWT governed_tool\npolicy_id + Idempotency-Key
+    Reneg -> Reneg: revalida tool/stage/evidência
+    Reneg -> Core: JWT de serviço + tenant\nIdempotency-Key
+    Core -> Core: valida caller/tenant\nreserva/replaya chave mutável
+    Core --> Reneg: resposta
+    Reneg --> Tools: resposta
+  else policy negada
+    Tools --> Agent: erro de autorização
+  end
+
+  Agent --> Orch: decisão estruturada
+  Orch -> Orch: aplica máquina de estados
+  Orch -> Pg: BEGIN\nUPDATE state\nINSERT Outbox\nUPDATE Inbox=completed\nCOMMIT
+  Orch --> BFF: 202 Accepted
+end
+
+BFF -> Kafka: commit offset
+@enduml
