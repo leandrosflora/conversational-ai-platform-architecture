@@ -1,0 +1,35 @@
+@startuml
+hide footbox
+autonumber
+
+queue "channel.webhook.received" as Input
+participant "KafkaWebhookConsumerService" as Consumer
+participant "conversation-orchestrator" as Orch
+queue "channel.webhook.received.retry" as Retry
+queue "channel.webhook.received.dlq" as DLQ
+
+Input ->> Consumer: registro + traceparent
+Consumer -> Consumer: lê x-delivery-attempt
+
+alt JSON inválido ou payload nulo
+  Consumer ->> DLQ: payload + reason/source
+  DLQ --> Consumer: publish confirmado
+  Consumer -> Input: commit offset
+else Orchestrator retorna 409/erro
+  Consumer ->> Retry: payload + tentativa incrementada
+  Retry --> Consumer: publish confirmado
+  Consumer -> Input: commit offset original
+  Retry ->> Consumer: nova entrega
+else tentativas esgotadas
+  Consumer ->> DLQ: payload + attempts + reason
+  DLQ --> Consumer: publish confirmado
+  Consumer -> Retry: commit offset
+else 202
+  Consumer -> Input: commit offset
+end
+
+note right of Consumer
+Se retry/DLQ falhar, o offset original
+não é commitado e ocorre seek/replay.
+end note
+@enduml

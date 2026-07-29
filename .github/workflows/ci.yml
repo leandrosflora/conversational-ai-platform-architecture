@@ -74,7 +74,9 @@ jobs:
         run: |
           bash -n scripts/ci-smoke.sh
           bash -n scripts/render-c4.sh
+          bash -n scripts/render-sequence-diagrams.sh
           bash -n scripts/verify-c4-generated.sh
+          bash -n scripts/verify-sequence-generated.sh
           bash -n scripts/write-ci-env.sh
           bash -n scripts/e2e-multirepo.sh
           bash -n scripts/backup-local.sh
@@ -86,6 +88,9 @@ jobs:
 
       - name: Verify generated C4 diagrams
         run: scripts/verify-c4-generated.sh
+
+      - name: Verify generated sequence diagrams
+        run: scripts/verify-sequence-generated.sh
 
       - name: Build MkDocs strictly
         run: mkdocs build --clean --strict
@@ -99,30 +104,38 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
-      - name: Render C4 diagrams
-        run: scripts/render-c4.sh
+      - name: Render architecture diagrams
+        run: |
+          scripts/render-c4.sh
+          scripts/render-sequence-diagrams.sh
 
       - name: Synchronize generated diagrams on same-repository PRs
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          git add docs/architecture/C4/*.svg docs/architecture/C4/*.png
+          git add \
+            docs/architecture/C4/*.svg \
+            docs/architecture/C4/*.png \
+            docs/architecture/sequence/*.svg \
+            docs/architecture/sequence/*.png
           if git diff --cached --quiet; then
             echo "Generated diagrams already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "docs: regenerate C4 artifacts"
+          git commit -m "docs: regenerate architecture diagram artifacts"
           git push origin "HEAD:${{ github.head_ref }}"
 
       - name: Upload generated diagrams
         uses: actions/upload-artifact@v7
         with:
-          name: c4-diagrams
+          name: architecture-diagrams
           if-no-files-found: error
           path: |
             docs/architecture/C4/*.svg
             docs/architecture/C4/*.png
+            docs/architecture/sequence/*.svg
+            docs/architecture/sequence/*.png
 
   link-validation:
     runs-on: ubuntu-latest

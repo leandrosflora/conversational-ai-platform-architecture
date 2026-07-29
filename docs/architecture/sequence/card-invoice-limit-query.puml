@@ -1,0 +1,31 @@
+@startuml
+hide footbox
+autonumber
+
+actor Cliente
+participant "whatsapp-bff" as BFF
+participant "conversation-orchestrator" as Orch
+participant "agent-runtime-fatura-cartao" as Agent
+participant "tool-service-cartao-credito" as Tools
+participant "Core Bancário Mock\nCard API :9405" as Core
+
+Cliente -> BFF: mensagem
+BFF -> Orch: POST /messages
+Orch -> Agent: POST /process\nJWT + tenant + StructuredState
+Agent -> Agent: guard determinístico de CPF
+
+alt CPF ausente
+  Agent --> Orch: solicita CPF
+else CPF informado
+  Agent -> Tools: MCP + JWT tool_execution
+  Tools -> Tools: caller == agent-runtime-fatura-cartao
+  Tools -> Core: GET card/limit|invoice\nJWT + X-Tenant-Id
+  Core -> Core: valida assinatura, audience,\nkid/sub, tenant e caller
+  Core --> Tools: resultado de cartão
+  Tools --> Agent: resultado
+  Agent --> Orch: ReplyText + State
+end
+
+Orch --> BFF: 202 Accepted
+BFF --> Cliente: resposta
+@enduml

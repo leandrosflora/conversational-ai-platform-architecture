@@ -1,0 +1,45 @@
+@startuml
+hide footbox
+autonumber
+
+participant "OutboxDispatcher" as Dispatcher
+database "PostgreSQL\norchestrator_outbox" as Outbox
+participant "conversation-memory-service" as Memory
+participant "conversation-audit-service" as Audit
+participant "conversation-handoff-service" as Handoff
+participant "whatsapp-bff" as BFF
+queue Kafka
+participant "WhatsApp Cloud API" as Meta
+
+Dispatcher -> Outbox: claim batch\nFOR UPDATE SKIP LOCKED
+Outbox --> Dispatcher: menor journey_version pendente
+
+loop cada efeito
+  alt memory projection
+    Dispatcher -> Memory: JWT + tenant + Idempotency
+  else audit
+    Dispatcher -> Audit: JWT + tenant + Idempotency-Key
+  else handoff
+    Dispatcher -> Handoff: JWT + tenant + Idempotency-Key
+  else resposta ao canal
+    Dispatcher -> BFF: JWT + tenant + Idempotency-Key
+    BFF -> BFF: SET NX pending no Redis
+    BFF -> Meta: envia mensagem
+    Meta --> BFF: messageId
+    BFF -> BFF: completed:messageId
+  else evento
+    Dispatcher ->> Kafka: intent/state + trace + tenant
+  end
+
+  alt sucesso/duplicado
+    Dispatcher -> Outbox: status=published
+  else falha
+    Dispatcher -> Outbox: status=failed\nnext_attempt_at com backoff
+  end
+end
+
+note right of Outbox
+Uma versão posterior não é liberada
+enquanto existir efeito anterior não publicado.
+end note
+@enduml
