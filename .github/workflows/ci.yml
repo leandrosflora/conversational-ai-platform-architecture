@@ -84,6 +84,7 @@ jobs:
           bash -n scripts/chaos-drill.sh
           python -m py_compile scripts/validate-contract-drift.py
           python -m py_compile scripts/validate-doc-freshness.py
+          python -m py_compile scripts/mkdocs_english_default.py
           python scripts/validate-doc-freshness.py
 
       - name: Verify generated C4 diagrams

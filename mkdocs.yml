@@ -1,5 +1,5 @@
 site_name: Conversational AI Platform Architecture
-site_description: Arquitetura de referência para IA conversacional com agentes, MCP, RAG, WhatsApp e observabilidade.
+site_description: Reference architecture for enterprise conversational AI with agents, MCP, RAG, WhatsApp, transactional systems, security, and end-to-end observability.
 site_author: Leandro Flora
 site_url: https://leandrosflora.github.io/conversational-ai-platform-architecture/
 use_directory_urls: false
@@ -7,9 +7,15 @@ repo_name: leandrosflora/conversational-ai-platform-architecture
 repo_url: https://github.com/leandrosflora/conversational-ai-platform-architecture
 edit_uri: edit/main/docs/
 
+hooks:
+  - scripts/mkdocs_english_default.py
+
+watch:
+  - docs
+
 theme:
   name: material
-  language: pt
+  language: en
   icon:
     logo: material/message-processing-outline
     repo: fontawesome/brands/github
@@ -20,14 +26,14 @@ theme:
       accent: cyan
       toggle:
         icon: material/weather-night
-        name: Usar tema escuro
+        name: Use dark theme
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: indigo
       accent: cyan
       toggle:
         icon: material/weather-sunny
-        name: Usar tema claro
+        name: Use light theme
   features:
     - navigation.tracking
     - navigation.tabs
@@ -40,88 +46,77 @@ theme:
 plugins:
   - search:
       lang:
-        - pt
         - en
+        - pt
   - i18n:
       docs_structure: suffix
       fallback_to_default: true
       reconfigure_material: true
       reconfigure_search: true
       languages:
-        - locale: pt
-          name: Português (Brasil)
-          default: true
-          build: true
         - locale: en
           name: English
+          default: true
           build: true
-          site_description: Reference architecture for enterprise conversational AI with agents, MCP, RAG, WhatsApp, transactional systems, security, and end-to-end observability.
+        - locale: pt
+          name: Português (Brasil)
+          build: true
+          site_description: Arquitetura de referência para IA conversacional com agentes, MCP, RAG, WhatsApp e observabilidade.
           nav_translations:
-            Início: Home
-            Visão geral: Overview
-            Contexto de negócio: Business context
-            Arquitetura C4: C4 architecture
-            Contexto implementado: Implemented context
-            Contexto alvo: Target context
-            Containers atuais: Current containers
-            Containers alvo: Target containers
-            Jornadas e sequências: Journeys and sequences
-            Arquitetura funcional: Functional architecture
-            Mapa de capacidades: Capability map
-            Mapa de domínios: Domain map
-            Contrato de skill: Skill contract
-            Estados de jornada: Journey states
-            Eventos de negócio: Business events
-            Ciclo de handoff: Handoff lifecycle
-            Contexto de identidade: Identity context
-            Governança do conhecimento: Knowledge governance
-            KPIs funcionais: Functional KPIs
-            Matriz de rastreabilidade: Traceability matrix
-            Integração bancária: Banking integration
-            Readiness para Core real: Real Core readiness
-            Checklist de onboarding: Onboarding checklist
-            Serviços: Services
-            Mapa completo: Full map
-            WhatsApp BFF: WhatsApp BFF
-            Conversation Orchestrator: Conversation Orchestrator
-            Agent Runtime: Agent Runtime
-            Tool Service MCP: MCP Tool Service
-            Renegotiation Service: Renegotiation Service
-            Agent Runtime Fatura Cartão: Card Billing Agent Runtime
-            Tool Service Cartão Crédito: Credit Card Tool Service
-            Core Bancário Mock: Banking Core Mock
-            Knowledge Service: Knowledge Service
-            Conversation Memory: Conversation Memory
-            Conversation Audit: Conversation Audit
-            Conversation Handoff: Conversation Handoff
-            Alertmanager: Alertmanager
-            Contratos: Contracts
-            Eventos Kafka: Kafka events
-            Dados e ownership: Data and ownership
-            Segurança: Security
-            Supply chain: Supply chain
-            Release e contratos executáveis: Release and executable contracts
-            Workload Identity e PDP: Workload Identity and PDP
-            Decisões: Decisions
-            Kafka como fila durável: Kafka as durable queue
-            Arquitetura hexagonal: Hexagonal architecture
-            MCP governado: Governed MCP
-            Resiliência: Resilience
-            Outbox, tools e ordering: Outbox, tools and ordering
-            Operação: Operations
-            Runbook: Runbook
-            SLOs e alertas: SLOs and alerts
-            Backup e recuperação: Backup and recovery
-            Retenção e LGPD: Retention and LGPD
-            Carga e caos: Load and chaos
-            Evals de IA: AI evals
-            Atualização de dependências: Dependency upgrades
-            Roadmap de produção: Production roadmap
-            Evidências: Evidence
-            Jornada E2E: E2E journey
-            Hardening P1: P1 hardening
-            Consistência P0: P0 consistency
-            Segredos por serviço: Per-service secrets
+            Home: Início
+            Overview: Visão geral
+            Business context: Contexto de negócio
+            C4 architecture: Arquitetura C4
+            Implemented context: Contexto implementado
+            Target context: Contexto alvo
+            Current containers: Containers atuais
+            Target containers: Containers alvo
+            Journeys and sequences: Jornadas e sequências
+            Functional architecture: Arquitetura funcional
+            Capability map: Mapa de capacidades
+            Domain map: Mapa de domínios
+            Skill contract: Contrato de skill
+            Journey states: Estados de jornada
+            Business events: Eventos de negócio
+            Handoff lifecycle: Ciclo de handoff
+            Identity context: Contexto de identidade
+            Knowledge governance: Governança do conhecimento
+            Functional KPIs: KPIs funcionais
+            Traceability matrix: Matriz de rastreabilidade
+            Banking integration: Integração bancária
+            Real Core readiness: Readiness para Core real
+            Onboarding checklist: Checklist de onboarding
+            Services: Serviços
+            Full map: Mapa completo
+            MCP Tool Service: Tool Service MCP
+            Card Billing Agent Runtime: Agent Runtime Fatura Cartão
+            Credit Card Tool Service: Tool Service Cartão Crédito
+            Banking Core Mock: Core Bancário Mock
+            Contracts: Contratos
+            Kafka events: Eventos Kafka
+            Data and ownership: Dados e ownership
+            Security: Segurança
+            Release and executable contracts: Release e contratos executáveis
+            Workload Identity and PDP: Workload Identity e PDP
+            Decisions: Decisões
+            Kafka as durable queue: Kafka como fila durável
+            Hexagonal architecture: Arquitetura hexagonal
+            Governed MCP: MCP governado
+            Resilience: Resiliência
+            Outbox, tools and ordering: Outbox, tools e ordering
+            Operations: Operação
+            SLOs and alerts: SLOs e alertas
+            Backup and recovery: Backup e recuperação
+            Retention and LGPD: Retenção e LGPD
+            Load and chaos: Carga e caos
+            AI evals: Evals de IA
+            Dependency upgrades: Atualização de dependências
+            Production roadmap: Roadmap de produção
+            Evidence: Evidências
+            E2E journey: Jornada E2E
+            P1 hardening: Hardening P1
+            P0 consistency: Consistência P0
+            Per-service secrets: Segredos por serviço
 
 markdown_extensions:
   - admonition
@@ -140,71 +135,71 @@ markdown_extensions:
       alternate_style: true
 
 nav:
-  - Início: index.md
-  - Visão geral:
-      - Contexto de negócio: context/business-context.md
-      - Arquitetura C4: architecture/c4-context.md
-      - Contexto implementado: architecture/c4-context-current.md
-      - Contexto alvo: architecture/c4-context-target.md
-      - Containers atuais: architecture/c4-container-current.md
-      - Containers alvo: architecture/c4-container-target.md
-      - Jornadas e sequências: architecture/sequence-diagrams.md
-  - Arquitetura funcional:
-      - Mapa de capacidades: functional/capability-map.md
-      - Mapa de domínios: functional/domain-map.md
-      - Contrato de skill: functional/skill-contract.md
-      - Estados de jornada: functional/journey-state-contracts.md
-      - Eventos de negócio: functional/business-events-catalog.md
-      - Ciclo de handoff: functional/handoff-case-lifecycle.md
-      - Contexto de identidade: functional/customer-identity-context.md
-      - Governança do conhecimento: functional/knowledge-governance.md
-      - KPIs funcionais: functional/business-kpi-map.md
-      - Matriz de rastreabilidade: functional/traceability-matrix.md
-  - Integração bancária:
-      - Readiness para Core real: integration/banking-core-readiness.md
-      - Checklist de onboarding: integration/core-onboarding-checklist.md
-  - Serviços:
-      - Mapa completo: contracts/services-map.md
+  - Home: index.md
+  - Overview:
+      - Business context: context/business-context.md
+      - C4 architecture: architecture/c4-context.md
+      - Implemented context: architecture/c4-context-current.md
+      - Target context: architecture/c4-context-target.md
+      - Current containers: architecture/c4-container-current.md
+      - Target containers: architecture/c4-container-target.md
+      - Journeys and sequences: architecture/sequence-diagrams.md
+  - Functional architecture:
+      - Capability map: functional/capability-map.md
+      - Domain map: functional/domain-map.md
+      - Skill contract: functional/skill-contract.md
+      - Journey states: functional/journey-state-contracts.md
+      - Business events: functional/business-events-catalog.md
+      - Handoff lifecycle: functional/handoff-case-lifecycle.md
+      - Identity context: functional/customer-identity-context.md
+      - Knowledge governance: functional/knowledge-governance.md
+      - Functional KPIs: functional/business-kpi-map.md
+      - Traceability matrix: functional/traceability-matrix.md
+  - Banking integration:
+      - Real Core readiness: integration/banking-core-readiness.md
+      - Onboarding checklist: integration/core-onboarding-checklist.md
+  - Services:
+      - Full map: contracts/services-map.md
       - WhatsApp BFF: services/whatsapp-bff.md
       - Conversation Orchestrator: services/conversation-orchestrator.md
       - Agent Runtime: services/agent-runtime-renegotiation.md
-      - Tool Service MCP: services/tool-service-renegotiation.md
+      - MCP Tool Service: services/tool-service-renegotiation.md
       - Renegotiation Service: services/renegotiation-service.md
-      - Agent Runtime Fatura Cartão: services/agent-runtime-fatura-cartao.md
-      - Tool Service Cartão Crédito: services/tool-service-cartao-credito.md
-      - Core Bancário Mock: services/core-bancario-mock.md
+      - Card Billing Agent Runtime: services/agent-runtime-fatura-cartao.md
+      - Credit Card Tool Service: services/tool-service-cartao-credito.md
+      - Banking Core Mock: services/core-bancario-mock.md
       - Knowledge Service: services/knowledge-service.md
       - Conversation Memory: services/conversation-memory-service.md
       - Conversation Audit: services/conversation-audit-service.md
       - Conversation Handoff: services/conversation-handoff-service.md
       - Alertmanager: services/alertmanager.md
-  - Contratos:
-      - Eventos Kafka: contracts/kafka-events.md
-      - Dados e ownership: contracts/data-stores.md
-      - Segurança: security/security-architecture.md
+  - Contracts:
+      - Kafka events: contracts/kafka-events.md
+      - Data and ownership: contracts/data-stores.md
+      - Security: security/security-architecture.md
       - Supply chain: security/supply-chain.md
-      - Release e contratos executáveis: governance/release-contract-governance.md
-  - Segurança:
-      - Workload Identity e PDP: security/workload-identity-pdp.md
-  - Decisões:
-      - Kafka como fila durável: adr/0001-kafka-durable-webhook-queue.md
-      - Arquitetura hexagonal: adr/0002-hexagonal-ports-and-adapters.md
-      - MCP governado: adr/0003-mcp-governed-tool-calling.md
-      - Resiliência: adr/0004-catch-log-continue-resilience.md
-      - Outbox, tools e ordering: adr/0005-transactional-outbox-governed-tools-and-ordering.md
-  - Operação:
+      - Release and executable contracts: governance/release-contract-governance.md
+  - Security:
+      - Workload Identity and PDP: security/workload-identity-pdp.md
+  - Decisions:
+      - Kafka as durable queue: adr/0001-kafka-durable-webhook-queue.md
+      - Hexagonal architecture: adr/0002-hexagonal-ports-and-adapters.md
+      - Governed MCP: adr/0003-mcp-governed-tool-calling.md
+      - Resilience: adr/0004-catch-log-continue-resilience.md
+      - Outbox, tools and ordering: adr/0005-transactional-outbox-governed-tools-and-ordering.md
+  - Operations:
       - Runbook: runbook.md
-      - SLOs e alertas: operations/slo-alerting.md
-      - Backup e recuperação: operations/disaster-recovery.md
-      - Retenção e LGPD: governance/data-retention-lgpd.md
-      - Carga e caos: testing/load-and-chaos.md
-      - Evals de IA: testing/evals.md
-      - Atualização de dependências: roadmap/platform-dependency-upgrades.md
-      - Roadmap de produção: roadmap/production-readiness.md
-  - Evidências:
-      - Jornada E2E: validation/2026-07-13-e2e-journey.md
-      - Hardening P1: validation/2026-07-18-p1-hardening-e2e.md
-      - Consistência P0: validation/2026-07-19-p0-consistency-e2e.md
-      - Segredos por serviço: validation/2026-07-20-per-service-internal-auth-secrets-e2e.md
+      - SLOs and alerts: operations/slo-alerting.md
+      - Backup and recovery: operations/disaster-recovery.md
+      - Retention and LGPD: governance/data-retention-lgpd.md
+      - Load and chaos: testing/load-and-chaos.md
+      - AI evals: testing/evals.md
+      - Dependency upgrades: roadmap/platform-dependency-upgrades.md
+      - Production roadmap: roadmap/production-readiness.md
+  - Evidence:
+      - E2E journey: validation/2026-07-13-e2e-journey.md
+      - P1 hardening: validation/2026-07-18-p1-hardening-e2e.md
+      - P0 consistency: validation/2026-07-19-p0-consistency-e2e.md
+      - Per-service secrets: validation/2026-07-20-per-service-internal-auth-secrets-e2e.md
 
 copyright: Copyright &copy; 2026 Leandro Flora — Apache-2.0
