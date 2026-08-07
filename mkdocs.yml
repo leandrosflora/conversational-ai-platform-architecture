@@ -9,7 +9,7 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
-  language: pt-BR
+  language: pt
   icon:
     logo: material/message-processing-outline
     repo: fontawesome/brands/github
@@ -48,7 +48,7 @@ plugins:
       reconfigure_material: true
       reconfigure_search: true
       languages:
-        - locale: pt_BR
+        - locale: pt
           name: Português (Brasil)
           default: true
           build: true
