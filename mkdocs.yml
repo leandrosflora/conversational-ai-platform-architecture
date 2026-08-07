@@ -29,7 +29,6 @@ theme:
         icon: material/weather-sunny
         name: Usar tema claro
   features:
-    - navigation.instant
     - navigation.tracking
     - navigation.tabs
     - navigation.sections
@@ -40,7 +39,89 @@ theme:
 
 plugins:
   - search:
-      lang: pt
+      lang:
+        - pt
+        - en
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: pt_BR
+          name: Português (Brasil)
+          default: true
+          build: true
+        - locale: en
+          name: English
+          build: true
+          site_description: Reference architecture for enterprise conversational AI with agents, MCP, RAG, WhatsApp, transactional systems, security, and end-to-end observability.
+          nav_translations:
+            Início: Home
+            Visão geral: Overview
+            Contexto de negócio: Business context
+            Arquitetura C4: C4 architecture
+            Contexto implementado: Implemented context
+            Contexto alvo: Target context
+            Containers atuais: Current containers
+            Containers alvo: Target containers
+            Jornadas e sequências: Journeys and sequences
+            Arquitetura funcional: Functional architecture
+            Mapa de capacidades: Capability map
+            Mapa de domínios: Domain map
+            Contrato de skill: Skill contract
+            Estados de jornada: Journey states
+            Eventos de negócio: Business events
+            Ciclo de handoff: Handoff lifecycle
+            Contexto de identidade: Identity context
+            Governança do conhecimento: Knowledge governance
+            KPIs funcionais: Functional KPIs
+            Matriz de rastreabilidade: Traceability matrix
+            Integração bancária: Banking integration
+            Readiness para Core real: Real Core readiness
+            Checklist de onboarding: Onboarding checklist
+            Serviços: Services
+            Mapa completo: Full map
+            WhatsApp BFF: WhatsApp BFF
+            Conversation Orchestrator: Conversation Orchestrator
+            Agent Runtime: Agent Runtime
+            Tool Service MCP: MCP Tool Service
+            Renegotiation Service: Renegotiation Service
+            Agent Runtime Fatura Cartão: Card Billing Agent Runtime
+            Tool Service Cartão Crédito: Credit Card Tool Service
+            Core Bancário Mock: Banking Core Mock
+            Knowledge Service: Knowledge Service
+            Conversation Memory: Conversation Memory
+            Conversation Audit: Conversation Audit
+            Conversation Handoff: Conversation Handoff
+            Alertmanager: Alertmanager
+            Contratos: Contracts
+            Eventos Kafka: Kafka events
+            Dados e ownership: Data and ownership
+            Segurança: Security
+            Supply chain: Supply chain
+            Release e contratos executáveis: Release and executable contracts
+            Workload Identity e PDP: Workload Identity and PDP
+            Decisões: Decisions
+            Kafka como fila durável: Kafka as durable queue
+            Arquitetura hexagonal: Hexagonal architecture
+            MCP governado: Governed MCP
+            Resiliência: Resilience
+            Outbox, tools e ordering: Outbox, tools and ordering
+            Operação: Operations
+            Runbook: Runbook
+            SLOs e alertas: SLOs and alerts
+            Backup e recuperação: Backup and recovery
+            Retenção e LGPD: Retention and LGPD
+            Carga e caos: Load and chaos
+            Evals de IA: AI evals
+            Atualização de dependências: Dependency upgrades
+            Roadmap de produção: Production roadmap
+            Evidências: Evidence
+            Jornada E2E: E2E journey
+            Hardening P1: P1 hardening
+            Consistência P0: P0 consistency
+            Segredos por serviço: Per-service secrets
 
 markdown_extensions:
   - admonition
